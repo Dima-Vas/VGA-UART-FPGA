@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 module VGA_wrapper #(
+    parameter ClockFrequency = 50_000_000,
     parameter FrameWidth = 640,
     parameter FrameHeight = 480,
     parameter PixelBitWidth = 16,
@@ -14,13 +15,14 @@ module VGA_wrapper #(
 
     wire [PixelBitWidth - 1:0] CurrPixelVGA;
     wire [PixelBitWidth - 1:0] CurrPixelCompressor;
+    
     wire Switch_PixelReady;
-    wire Switch_PixelForCompressionReady;
-    wire Switch_SendFrameUART;
+
+    wire [7:0] CompressedFrame;
+    wire Switch_SendFrameUART;    
+    
     wire Switch_FIFOFull;
     wire Switch_FIFOEmpty;
-    wire [7:0] CompressedFrame;
-    
     
     VGA #(PixelBitWidth) vga(
         .p_clk(p_clk),
@@ -31,7 +33,7 @@ module VGA_wrapper #(
         .o_ready(Switch_PixelReady)
     );
     
-    UART #(50_000_000 / UARTBaudRate) uart(
+    UART #(ClockFrequency, UARTBaudRate) uart(
         .CLK(CLK),
         .RST(RST),
         .i_send(Switch_SendFrameUART),
@@ -39,11 +41,11 @@ module VGA_wrapper #(
         .o_data(o_data)
     );
     
-    Compressor #(FrameWidth, PixelBitWidth)(
+    Compressor #(FrameWidth, PixelBitWidth) compressor (
         .CLK(CLK),
         .RST(RST),
         .i_pixel(CurrPixelCompressor),
-        .i_ready(Switch_PixelForCompressionReady),
+        .i_ready(~Switch_FIFOEmpty),
         .o_frame(CompressedFrame),
         .o_ready(Switch_SendFrameUART)
     );
@@ -51,8 +53,8 @@ module VGA_wrapper #(
     fifo_generator_0 PCLK_CLK_FIFO (
         .wr_clk(p_clk),
         .rd_clk(CLK),
-        .wr_en(Switch_PixelReady),
-        .rd_en(Switch_PixelForCompressionReady),
+        .wr_en(Switch_PixelReady & ~Switch_FIFOFull),
+        .rd_en(~Switch_FIFOEmpty), // if there is info - compressor always ready to read
         .din(CurrPixelVGA),
         .dout(CurrPixelCompressor),
         .full(Switch_FIFOFull),

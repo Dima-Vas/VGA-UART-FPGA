@@ -14,3 +14,7 @@ set_property IOSTANDARD LVCMOS33 [get_ports {i_data[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {i_data[2]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {i_data[1]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {i_data[0]}]
+
+set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports o_data]
+set_property IOSTANDARD LVCMOS33 [get_ports h_sync]
