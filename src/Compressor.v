@@ -30,35 +30,35 @@ module Compressor #(
     
     integer i;
     
-    RLE #(2) rle_y(
-        .CLK(CLK),
-        .RST(RST),
-        .i_ready((Counter_CurrYVal > 0)),
-        .i_val(CurrYVal),
-        .o_val(),
-        .o_count(),
-        .o_ready()
-    );
+//    RLE #(2) rle_y(
+//        .CLK(CLK),
+//        .RST(RST),
+//        .i_ready((Counter_CurrYVal > 0)),
+//        .i_val(CurrYVal),
+//        .o_val(),
+//        .o_count(),
+//        .o_ready()
+//    );
     
-    RLE #(2) rle_u(
-        .CLK(CLK),
-        .RST(RST),
-        .i_ready((Counter_CurrUVal > 0)),
-        .i_val(CurrUVal),
-        .o_val(),
-        .o_count(),
-        .o_ready()
-    );
+//    RLE #(2) rle_u(
+//        .CLK(CLK),
+//        .RST(RST),
+//        .i_ready((Counter_CurrUVal > 0)),
+//        .i_val(CurrUVal),
+//        .o_val(),
+//        .o_count(),
+//        .o_ready()
+//    );
     
-    RLE #(2) rle_v(
-        .CLK(CLK),
-        .RST(RST),
-        .i_ready((Counter_CurrVVal > 0)),
-        .i_val(CurrVVal),
-        .o_val(),
-        .o_count(),
-        .o_ready()
-    );
+//    RLE #(2) rle_v(
+//        .CLK(CLK),
+//        .RST(RST),
+//        .i_ready((Counter_CurrVVal > 0)),
+//        .i_val(CurrVVal),
+//        .o_val(),
+//        .o_count(),
+//        .o_ready()
+//    );
 
     always @(posedge CLK or negedge RST) begin
         if (!RST) begin
