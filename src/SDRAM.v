@@ -1,6 +1,6 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
 
-// READ IN BURST THE ENTIRE ROW
+
 // ----------
 // A minimalistic SDRAM controller, originally written for Winbond W9825G6KH
 // ----------
@@ -27,8 +27,8 @@ module SDRAM #(
     output reg [12:0] o_addr,           // SDRAM's address bus
     output reg [1:0] o_bank,            // SDRAM's bank selector
     output reg [1:0] o_dqm,             // SDRAM's mask for input/output
-    output wire [WordLength-1:0] o_data, // Data read from SDRAM
-    output wire o_valid,                 // Data is valid
+    output wire [WordLength-1:0] o_data,// Data read from SDRAM
+    output wire o_valid,                // Data is valid
     output wire o_busy                  // User cannot send commands to the controller
 );
     
@@ -37,20 +37,21 @@ module SDRAM #(
                 SET_MODE      = 4'b0010, //
                 REFRESH       = 4'b0011, //
                 ACTIVATE      = 4'b0100, //
-                WRITE_WORD    = 4'b0101, //
-                READ_CMD      = 4'b0110, //
+                RW_WORD       = 4'b0101, //
+                RW_CMD        = 4'b0110, //
                 INIT_PAUSE    = 4'b0111, //
                 TRCD_PAUSE    = 4'b1000,// An addition to respect the wait between activate and read/write
                 TCL_PAUSE     = 4'b1001,
-                READ_WORD     = 4'b1010;
+                TRP_PAUSE     = 4'b1010;
               
     
-    localparam  INIT_PAUSE_WAIT     = ClockFrequency / 5_000_000, // 200ns
+    localparam  INIT_PAUSE_WAIT     = ClockFrequency / 50_000_000 * 10_000, // 200μs of powerup time
                 PRECHARGE_ALL_WAIT  = ClockFrequency / 50_000_000, // 20ns of precharge time
                 SET_MODE_WAIT       = ClockFrequency / 50_000_000, // 2 * 10ns for W9825G6KH
                 REFRESH_WAIT        = 8 * (ClockFrequency * 60 / 1_000_000_000 ), // needs exactly 8 refresh cycles, 60ns each
                 TRCD_PAUSE_WAIT     = ClockFrequency / 50_000_000, // 20ns between ACTIVATE and READ/WRITE
-                TCL_PAUSE_WAIT      = 3; // three clock cycles since using CAS latency of 3
+                TCL_PAUSE_WAIT      = 3, // three clock cycles since using CAS latency of 3
+                TRP_PAUSE_WAIT      = PRECHARGE_ALL_WAIT; // 20ns between PRECHARGE and ACTIVE
 
     reg [15:0] Counter_WaitClocks, Counter_NextWaitClocks; // I guess max of 2**16 NOPS
     
@@ -82,7 +83,7 @@ module SDRAM #(
             o_addr[3] = 1'b0; // Sequential addressing
             o_addr[6:4] = 3'b011; // CAS latency : 3
             o_addr[8:7] = 2'b00; // Reserved
-            o_addr[9] = 1'b1; // Burst read and single write
+            o_addr[9] = 1'b0; // Burst read and burst write
             o_addr[12:10] = 3'b000; // Reserved
             o_bank[1:0] = 2'b00; // Reserved
         end
@@ -118,7 +119,10 @@ module SDRAM #(
     
     task SetWrite;
         begin
-            
+            o_cs_n = 1'b0;
+            o_ras_n = 1'b1;
+            o_cas_n = 1'b0;
+            o_we_n = 1'b0;
         end
     endtask
     
@@ -130,7 +134,7 @@ module SDRAM #(
     assign ColAddrReq = i_addr[AddressWidth-BankAddrLen-RowAddrLen-1 : AddressWidth-BankAddrLen-RowAddrLen-ColAddrLen];
     
     reg [ColAddrLen-1:0] ColAddrSaved;
-    reg [1:0] Switch_OperationReq; // 0 for write, 1 for read
+    reg [1:0] Switch_OperationRead; // 0 for write, 1 for read
     reg [$clog2(ReadBurstLength)-1:0] Counter_BurstWordsLeft;
     reg [WordLength-1:0] Register_o_data;
     reg Register_o_valid;
@@ -138,6 +142,14 @@ module SDRAM #(
     assign o_busy = (CurrentState != IDLE);
     assign o_data = Register_o_data;
     assign o_valid = Register_o_valid;
+
+    wire [WordLength-1:0] DataToReadFromSDRAM; // controller writes to SDRAM from here
+    reg [WordLength-1:0] DataToWriteToSDRAM; // controller reads from SDRAM into here
+    reg Switch_WriteToSDRAM;
+
+    assign io_data = Switch_WriteToSDRAM ? DataToWriteToSDRAM : {WordLength{1'bz}};
+
+    assign DataToReadFromSDRAM = io_data;
     
     always @(posedge CLK or negedge RST) begin
         if (!RST) begin
@@ -146,6 +158,7 @@ module SDRAM #(
             Counter_BurstWordsLeft <= 0;
             Register_o_data <= 0;
             Register_o_valid <= 1'b0;
+            Switch_WriteToSDRAM <= 1'b0;
         end else begin
             Counter_WaitClocks <= Counter_WaitClocks - 1;
             if (Counter_WaitClocks == 0) begin
@@ -153,12 +166,23 @@ module SDRAM #(
             end
             CurrentState <= NextState;
             Register_o_valid <= 1'b0;
-            if (NextState == READ_CMD) begin
+            Switch_WriteToSDRAM <= 1'b0;
+            if (CurrentState == TCL_PAUSE && Counter_WaitClocks == 0) begin
                 Counter_BurstWordsLeft <= ReadBurstLength;
-            end else if (CurrentState == READ_WORD) begin
+                if (~Switch_OperationRead) begin
+                    DataToWriteToSDRAM <= i_data; // WRITE requires data early
+                    Switch_WriteToSDRAM <= 1'b1;
+                end
+            end else if (CurrentState == RW_WORD) begin
+                if (Switch_OperationRead) begin
+                    Register_o_data <= DataToReadFromSDRAM; // need to revise this latching
+                    Register_o_valid <= 1'b1;
+                    Switch_WriteToSDRAM <= 1'b0;
+                end else begin
+                    Switch_WriteToSDRAM <= 1'b1;
+                    DataToWriteToSDRAM <= i_data;
+                end 
                 Counter_BurstWordsLeft <= Counter_BurstWordsLeft - 1;
-                Register_o_data <= io_data; // need to revise this latching
-                Register_o_valid <= 1'b1;
             end
         end
     end
@@ -199,7 +223,7 @@ module SDRAM #(
                 SetRefresh();
                 if (Counter_WaitClocks == 0) begin
                     NextState = IDLE;
-                    Counter_NextWaitClocks = 0; // do nothing until a read/write command comes
+                    Counter_NextWaitClocks = 0;
                 end else begin
                     NextState = REFRESH;
                 end
@@ -208,8 +232,8 @@ module SDRAM #(
                 SetNOP();
                 o_clk_en = 1'b1;
                 o_dqm = 2'b11;
-                if (i_enable) begin
-                    Switch_OperationReq = i_rw;
+                if (i_enable && !o_busy) begin
+                    Switch_OperationRead = i_rw;
                     NextState = ACTIVATE;
                     Counter_NextWaitClocks = 1; // just launch ACTIVATE
                 end else begin
@@ -231,38 +255,51 @@ module SDRAM #(
             TRCD_PAUSE : begin
                 SetNOP();
                 if (Counter_WaitClocks == 0) begin
-                    NextState = (Switch_OperationReq) ? READ_CMD : WRITE_WORD;
+                    NextState = RW_CMD;
                     Counter_NextWaitClocks = 1; // Just launch READ_BURST
                 end else begin
                     NextState = TRCD_PAUSE;
                 end
             end
-            READ_CMD : begin
-                SetRead();
+            RW_CMD : begin
+                if (Switch_OperationRead) begin
+                    SetRead();
+                    NextState = TCL_PAUSE;
+                    Counter_NextWaitClocks = TCL_PAUSE_WAIT;
+                end else begin 
+                    SetWrite();
+                    NextState = RW_WORD;
+                    Counter_NextWaitClocks = 1;
+                end
                 o_addr[ColAddrLen-1:0] = ColAddrSaved;
                 o_addr[10] = 1; // reading with auto-precharge
-                NextState = TCL_PAUSE;
-                Counter_NextWaitClocks = TCL_PAUSE_WAIT;
             end
             TCL_PAUSE : begin
                 SetNOP();
                 if (Counter_WaitClocks == 0) begin
-                    NextState = READ_WORD;
+                    NextState = RW_WORD;
                     Counter_NextWaitClocks = 1; // Just launch READ_WORD
                 end else begin
                     NextState = TCL_PAUSE;
                 end
             end
-            READ_WORD : begin
-                if (Counter_BurstWordsLeft == 1) begin
+            RW_WORD : begin
+                if (Counter_BurstWordsLeft == 0) begin
+                    NextState = TRP_PAUSE;
+                    Counter_NextWaitClocks = TRP_PAUSE_WAIT;
+                end else begin
+                    NextState = RW_WORD;
+                end
+            end
+            TRP_PAUSE : begin
+                SetNOP();
+                o_dqm = 2'b11;
+                if (Counter_WaitClocks == 0) begin
                     NextState = IDLE;
                     Counter_NextWaitClocks = 0;
                 end else begin
-                    NextState = READ_WORD;
+                    NextState = TRP_PAUSE;
                 end
-            end
-            WRITE_WORD : begin
-                
             end
             default : begin
             end
