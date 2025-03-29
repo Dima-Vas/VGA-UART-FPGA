@@ -6,7 +6,11 @@ module VGA_wrapper #(
     parameter FrameHeight = 480,
     parameter PixelBitWidth = 16,
     parameter BaudRateUART = 115200,
-    parameter WordLengthSDRAM = 16
+    parameter WordLengthSDRAM = 16,
+    parameter BankAddrLengthSDRAM = 2,
+    parameter RowAddrLengthSDRAM = 13,
+    parameter ColAddrLengthSDRAM = 9,
+    parameter AddressWidthSDRAM = BankAddrLengthSDRAM + RowAddrLengthSDRAM + ColAddrLengthSDRAM
 )(
     input wire CLK, RST,
     inout [WordLengthSDRAM-1:0] io_data,
@@ -23,82 +27,84 @@ module VGA_wrapper #(
     output wire o_data
 );
 
-    localparam WordLenSDRAM         = 16,
-               BankAddrLenSDRAM     = 2,
-               RowAddrLenSDRAM      = 13,
-               ColAddrLenSDRAM      = 9,
-               AddressWidthSDRAM    = BankAddrLenSDRAM + RowAddrLenSDRAM + ColAddrLenSDRAM,
-               ReadBurstLenSDRAM    = 8;
+    localparam BurstLengthSDRAM = 8;
+    localparam MaxBurstsWritten = (1<<AddressWidthSDRAM)/BurstLengthSDRAM;
     
-
-    wire [PixelBitWidth - 1:0] CurrPixelVGA;
-    wire [PixelBitWidth - 1:0] CurrPixelCompressor;
+    wire [PixelBitWidth - 1:0] PixelFromVGA;
+    wire [PixelBitWidth - 1:0] PixelFromSDRAM;
     
-    wire Switch_PixelReady;
+    wire Switch_PixelFromVGAReady;
 
     wire [7:0] CompressedFrame;
     wire Switch_SendFrameUART;    
     
+    reg Switch_EnableReadFromFIFO;
     wire Switch_FIFOFull;
     wire Switch_FIFOEmpty;
+    wire [PixelBitWidth-1:0] PixelFromFIFO;
     
-    reg Switch_EnableSDRAM;
-    reg Switch_EnableReadSDRAM; // 0 - write, 1 - read
-    reg [AddressWidthSDRAM-1:0] AddressSDRAM;
-    wire [WordLengthSDRAM-1:0] InputDataSRAM;
-    wire Switch_PixelForCompressorReady;
+    wire Switch_ValidSDRAM;
     wire Switch_BusySDRAM;
+    
+    assign io_data = (Switch_EnableSDRAM) ? InputDataToSDRAM : {WordLengthSDRAM{1'bz}};
+
+    integer i;
+    
+    
+    reg [PixelBitWidth-1:0] PixelsForSDRAM [BurstLengthSDRAM-1:0];
+    reg [$clog2(BurstLengthSDRAM)-1:0] Counter_PixelsForSDRAM;
+    reg [$clog2(MaxBurstsWritten)-1:0] CurrBurstsWritten;
+    reg Switch_BurstOngoing;
+    reg [$clog2(BurstLengthSDRAM)-1:0] Counter_CurrBurstWord;
+    
+    // Need to implement a read into a burst I will write to an SDRAM
+    always @(posedge CLK or negedge RST) begin
+        if (!RST) begin
+            Counter_CurrBurstWord <= 0;
+            Counter_PixelsForSDRAM <= 0;
+            CurrBurstsWritten <= 0;
+            Switch_BurstOngoing <= 1'b0;
+            for (i = 0; i < BurstLengthSDRAM; i = i + 1) begin
+                PixelsForSDRAM[i] <= {PixelBitWidth{1'b0}};
+            end
+        end else begin
+            Switch_EnableReadFromFIFO <= 1'b1; // to stop the messages
+        end
+    end
     
     VGA #(PixelBitWidth) vga(
         .p_clk(p_clk),
         .RST(RST),
         .h_sync(h_sync),
         .i_data(i_data),
-        .o_data(CurrPixelVGA),
-        .o_ready(Switch_PixelReady)
-    );
-    
-    UART #(ClockFrequency, BaudRateUART) uart(
-        .CLK(CLK),
-        .RST(RST),
-        .i_send(Switch_SendFrameUART),
-        .i_frame(CompressedFrame),
-        .o_data(o_data)
-    );
-    
-    Compressor #(FrameWidth, PixelBitWidth) compressor (
-        .CLK(CLK),
-        .RST(RST),
-        .i_pixel(CurrPixelCompressor),
-        .i_ready(Switch_PixelForCompressorReady),
-        .o_frame(CompressedFrame),
-        .o_ready(Switch_SendFrameUART)
+        .o_data(PixelFromVGA),
+        .o_ready(Switch_PixelFromVGAReady)
     );
     
     fifo_generator_0 PCLK_CLK_FIFO (
         .wr_clk(p_clk),
         .rd_clk(CLK),
-        .wr_en(Switch_PixelReady & ~Switch_FIFOFull),
-        .rd_en(Switch_EnableSDRAM & Switch_EnableReadSDRAM & ~Switch_BusySDRAM),
-        .din(CurrPixelVGA),
-        .dout(InputDataSRAM),
+        .wr_en(Switch_PixelFromVGAReady),
+        .din(PixelFromVGA),
+        .rd_en(Switch_EnableReadFromFIFO),
+        .dout(PixelFromFIFO),
         .full(Switch_FIFOFull),
         .empty(Switch_FIFOEmpty)
     );
     
     SDRAM #(ClockFrequency, 
-            WordLenSDRAM,
-            BankAddrLenSDRAM,
-            RowAddrLenSDRAM,
-            ColAddrLenSDRAM,
+            WordLengthSDRAM,
+            BankAddrLengthSDRAM,
+            RowAddrLengthSDRAM,
+            ColAddrLengthSDRAM,
             AddressWidthSDRAM,
-            ReadBurstLenSDRAM) sdram (
+            BurstLengthSDRAM) sdram (
         .CLK(CLK),
         .RST(RST),
         .i_enable(Switch_EnableSDRAM),
         .i_rw(Switch_EnableReadSDRAM),
-        .i_addr(AddressSDRAM),
-        .i_data(InputDataSRAM),
+        .i_addr(AddressToSDRAM),
+        .i_data(InputDataToSDRAM),
         .io_data(io_data),
         .o_clk_en(o_clk_en),
         .o_cs_n(o_cs_n),
@@ -108,19 +114,26 @@ module VGA_wrapper #(
         .o_addr(o_addr),
         .o_bank(o_bank),
         .o_dqm(o_dqm),
-        .o_data(CurrPixelCompressor),
-        .o_valid(Switch_PixelForCompressorReady),
+        .o_data(PixelFromSDRAM),
+        .o_valid(Switch_ValidSDRAM),
         .o_busy(Switch_BusySDRAM)
     );
     
-    always @(posedge CLK or negedge RST) begin
-        if (!RST) begin
-            Switch_EnableSDRAM <= 1'b0;
-            Switch_EnableReadSDRAM <= 1'b0;
-            AddressSDRAM <= 0;
-        end else begin
-            
-        end
-    end
+    Compressor #(FrameWidth, PixelBitWidth) compressor (
+        .CLK(CLK),
+        .RST(RST),
+        .i_pixel(PixelFromSDRAM),
+        .i_ready(Switch_PixelForCompressorReady),
+        .o_frame(CompressedFrame),
+        .o_ready(Switch_SendFrameUART)
+    );
+    
+    UART #(ClockFrequency, BaudRateUART) uart(
+        .CLK(CLK),
+        .RST(RST),
+        .i_send(Switch_SendFrameUART),
+        .i_frame(CompressedFrame),
+        .o_data(o_data)
+    );
     
 endmodule

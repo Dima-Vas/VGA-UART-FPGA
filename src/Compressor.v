@@ -28,8 +28,6 @@ module Compressor #(
     
     reg Switch_ReadingU; // if 1, reading U in the Y+U/V pair
     
-    integer i;
-    
 //    RLE #(2) rle_y(
 //        .CLK(CLK),
 //        .RST(RST),
