@@ -32,6 +32,8 @@ module VGA_wrapper #(
     
     wire [PixelBitWidth - 1:0] PixelFromVGA;
     wire [PixelBitWidth - 1:0] PixelFromSDRAM;
+    reg [AddressWidthSDRAM-1:0] AddressToSDRAM;
+    reg [WordLengthSDRAM-1:0] InputDataToSDRAM;
     
     wire Switch_PixelFromVGAReady;
 
@@ -64,6 +66,8 @@ module VGA_wrapper #(
             Counter_PixelsForSDRAM <= 0;
             CurrBurstsWritten <= 0;
             Switch_BurstOngoing <= 1'b0;
+            Switch_EnableReadFromFIFO <= 1'b0;
+            InputDataToSDRAM <= 0;
             for (i = 0; i < BurstLengthSDRAM; i = i + 1) begin
                 PixelsForSDRAM[i] <= {PixelBitWidth{1'b0}};
             end
