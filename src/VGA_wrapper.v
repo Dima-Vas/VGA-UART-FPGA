@@ -45,7 +45,8 @@ module VGA_wrapper #(
     wire Switch_FIFOEmpty;
     wire [PixelBitWidth-1:0] PixelFromFIFO;
     
-    wire Switch_ValidSDRAM;
+    wire Switch_ValidWriteToSDRAM;
+    wire Switch_ValidReadFromSDRAM;
     wire Switch_BusySDRAM;
     
     assign io_data = (Switch_EnableSDRAM) ? InputDataToSDRAM : {WordLengthSDRAM{1'bz}};
@@ -119,7 +120,8 @@ module VGA_wrapper #(
         .o_bank(o_bank),
         .o_dqm(o_dqm),
         .o_data(PixelFromSDRAM),
-        .o_valid(Switch_ValidSDRAM),
+        .o_valid_wr(Switch_ValidWriteToSDRAM),
+        .o_valid_rd(Switch_ValidReadFromSDRAM),
         .o_busy(Switch_BusySDRAM)
     );
     
