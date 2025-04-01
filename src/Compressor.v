@@ -58,7 +58,7 @@ module Compressor #(
 //        .o_ready()
 //    );
 
-    always @(posedge CLK or negedge RST) begin
+    always @(posedge CLK) begin
         if (!RST) begin
             o_frame <= 0;
             o_ready <= 1'b0;

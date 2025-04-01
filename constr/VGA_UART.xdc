@@ -138,3 +138,6 @@ set_property IOSTANDARD LVCMOS33 [get_ports v_sync]
 set_property CFGBVS VCCO [current_design]
 set_property CONFIG_VOLTAGE 3.3 [current_design]
 
+set_property SLEW FAST [get_ports o_data]
+set_property DRIVE 12 [get_ports o_data]
+

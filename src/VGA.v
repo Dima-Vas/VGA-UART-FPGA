@@ -6,9 +6,8 @@
 module VGA #(
     parameter PixelBitWidth = 16
 )(
-    input wire RST,
+    input wire p_clk, RST,
     input wire h_sync,
-    input wire p_clk,
     input [7:0] i_data,
     output reg [PixelBitWidth-1:0] o_data,
     output reg o_ready
@@ -16,7 +15,7 @@ module VGA #(
 
     reg [$clog2(PixelBitWidth)-1:0] Counter_BitsRead;
 
-    always @(posedge p_clk or negedge RST) begin
+    always @(posedge p_clk) begin
         if (!RST) begin
             Counter_BitsRead <= 0;
             o_data <= 0;

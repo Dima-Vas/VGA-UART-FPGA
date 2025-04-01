@@ -3,6 +3,14 @@
 
 // ----------
 // A minimalistic SDRAM controller, originally written for Winbond W9825G6KH
+// To Write a burst of 8 words:
+// - set the i_enable to 1, i_rw to 0 and i_data with the first word to write
+// - set the i_enable to 0 and wait for o_valid_wr to go 1
+// - switch the i_data to the next value to write until all 8 are written
+// To Read a brust of 8 words:
+// - set the i_enable to 1, i_rw to 1 and i_addr with the first address to read
+// - set the i_enable to 0 and wait for o_valid_rd to go 1
+// - read the 8 words, one for each of the 8 subsequent clock ticks
 // ----------
 module SDRAM #(
     parameter ClockFrequency = 50_000_000,
@@ -147,7 +155,7 @@ module SDRAM #(
     
     assign Switch_NeedToRefresh = (Counter_TimeToNextRefresh >= REFRESH_REGULAR_PERIOD) ? 1'b1 : 1'b0;
     
-    always @(posedge CLK or negedge RST) begin
+    always @(posedge CLK) begin
         if (!RST) begin
             CurrentState <= INIT_PAUSE;
             Counter_WaitClocks <= INIT_PAUSE_WAIT; // 200ns for the initial pause

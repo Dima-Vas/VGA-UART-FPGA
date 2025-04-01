@@ -61,7 +61,7 @@ module VGA_wrapper #(
     reg [$clog2(BurstLengthSDRAM)-1:0] Counter_CurrBurstWord;
     
     // Need to implement a read into a burst I will write to an SDRAM
-    always @(posedge CLK or negedge RST) begin
+    always @(posedge CLK) begin
         if (!RST) begin
             Counter_CurrBurstWord <= 0;
             Counter_PixelsForSDRAM <= 0;

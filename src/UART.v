@@ -22,7 +22,7 @@ module UART #(
     reg [$clog2(FrameWidth)-1:0] Counter_CurrRegisterBit = 0;
     reg [$clog2(TicksPerBit)-1:0] Counter_CurrTick = 0;
     
-    always @(posedge CLK or negedge RST) begin
+    always @(posedge CLK) begin
         if (!RST) begin        
             ShiftRegister <= 10'b1111111111;
             Counter_CurrRegisterBit <= 0;
