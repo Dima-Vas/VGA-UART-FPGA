@@ -35,7 +35,7 @@ module SCCB #(
                 STOP_RISE   = 4'b0111,
                 STOP_FALL   = 4'b1000;
     
-    reg [2:0] CurrentState;
+    reg [3:0] CurrentState;
     
     reg [3:0] Counter_CurrTransferCycle;
     
@@ -83,7 +83,7 @@ module SCCB #(
                 SETUP : begin
                     Register_o_sio_d <= 1'b1;
                     Switch_TristateWrite <= 1'b1;
-                    if (Counter_SystemClockTick + 1 == (ClockHalfPeriodSCCB / 2)) begin // to stabilize the clock before the setup
+                    if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB) begin // to stabilize the clock before the setup
                         CurrentState <= START;
                         Switch_ClockPhaseSCCB <= 1'b1;
                         Counter_SystemClockTick <= 0;
@@ -95,7 +95,6 @@ module SCCB #(
                     if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB / 2) begin
                         CurrentState <= DATA_FALL;
                         Counter_CurrBit <= 7;
-                        Register_o_sio_d <= CurrDataToTransfer[Counter_CurrBit];
                     end
                 end
                 DATA_FALL : begin // clock is 0, set the data
@@ -126,23 +125,25 @@ module SCCB #(
                 end
                 ACK_DONE : begin // SCCB does not check the ACK signal
                     Switch_TristateWrite <= 1'b0;
-                    case (Counter_CurrTransferCycle) 
-                        0 : begin // transferred the AddressOV7670
-                            CurrentState <= DATA_FALL;
-                            CurrDataToTransfer <= Register_i_addr;
-                            Counter_CurrTransferCycle <= 2'b01;
-                        end
-                        1 : begin // the register address
-                            CurrentState <= DATA_FALL;
-                            CurrDataToTransfer <= Register_i_data;
-                            Counter_CurrTransferCycle <= 2'b10;
-                        end
-                        2 : begin // the register value, now STOP
-                            CurrentState <= STOP_RISE;
-                            Counter_CurrTransferCycle <= 2'b00;
-                            Counter_SystemClockTick <= 0;
-                        end
-                    endcase
+                    if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB) begin
+                        case (Counter_CurrTransferCycle) 
+                            0 : begin // transferred the AddressOV7670
+                                CurrentState <= DATA_FALL;
+                                CurrDataToTransfer <= Register_i_addr;
+                                Counter_CurrTransferCycle <= 2'b01;
+                            end
+                            1 : begin // the register address
+                                CurrentState <= DATA_FALL;
+                                CurrDataToTransfer <= Register_i_data;
+                                Counter_CurrTransferCycle <= 2'b10;
+                            end
+                            2 : begin // the register value, now STOP
+                                CurrentState <= STOP_RISE;
+                                Counter_CurrTransferCycle <= 2'b00;
+                                Counter_SystemClockTick <= 0;
+                            end
+                        endcase
+                    end
                 end
                 STOP_RISE : begin
                     Switch_TristateWrite <= 1'b1;
@@ -159,7 +160,7 @@ module SCCB #(
                     end
                 end
                 IDLE : begin
-                    Switch_TristateWrite <= 1'b0;
+                    Switch_TristateWrite <= 1'b1;
                     Register_o_sio_d <= 1'b1;
                     if (i_ready) begin
                         Register_i_data <= i_data; // latch data
