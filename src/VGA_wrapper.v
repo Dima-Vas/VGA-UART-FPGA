@@ -54,6 +54,7 @@ module VGA_wrapper #(
     wire Switch_ValidReadFromSDRAM;
     wire Switch_BusySDRAM;
     
+    reg Switch_EnableSDRAM;
     assign io_data = (Switch_EnableSDRAM) ? InputDataToSDRAM : {WordLengthSDRAM{1'bz}};
 
     integer i;
@@ -77,6 +78,7 @@ module VGA_wrapper #(
                 PixelsForSDRAM[i] <= {PixelBitWidth{1'b0}};
             end
         end else begin
+//            if (Switch_Enable)
             Switch_EnableReadFromFIFO <= 1'b1; // to stop the messages
         end
     end

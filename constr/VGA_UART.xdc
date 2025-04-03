@@ -5,8 +5,8 @@ create_clock -period 125.000 -name p_clk [get_ports p_clk]
 set_property PACKAGE_PIN R2 [get_ports CLK]
 set_property IOSTANDARD LVCMOS33 [get_ports CLK]
 
-set_property PACKAGE_PIN P4 [get_ports x_clk]
-set_property IOSTANDARD LVCMOS33 [get_ports x_clk]
+set_property PACKAGE_PIN P4 [get_ports p_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
 
 set_property PACKAGE_PIN H18 [get_ports RST]
 set_property IOSTANDARD LVCMOS33 [get_ports RST]
@@ -20,8 +20,8 @@ set_property IOSTANDARD LVCMOS33 [get_ports h_sync]
 set_property PACKAGE_PIN C17 [get_ports v_sync]
 set_property IOSTANDARD LVCMOS33 [get_ports v_sync]
 
-set_property PACKAGE_PIN R3 [get_ports p_clk]
-set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
+set_property PACKAGE_PIN R3 [get_ports x_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports x_clk]
 
 set_property PACKAGE_PIN F15 [get_ports o_sio_c]
 set_property IOSTANDARD LVCMOS33 [get_ports o_sio_c]
