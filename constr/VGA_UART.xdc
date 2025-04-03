@@ -1,12 +1,33 @@
 create_clock -period 20.000 -name CLK [get_ports CLK]
-create_clock -period 40.000 -name p_clk [get_ports p_clk]
+create_clock -period 40.000 -name x_clk [get_ports x_clk]
+create_clock -period 125.000 -name p_clk [get_ports p_clk]
 
 set_property PACKAGE_PIN R2 [get_ports CLK]
-set_property PACKAGE_PIN P4 [get_ports p_clk]
 set_property IOSTANDARD LVCMOS33 [get_ports CLK]
+
+set_property PACKAGE_PIN P4 [get_ports x_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports x_clk]
 
 set_property PACKAGE_PIN H18 [get_ports RST]
 set_property IOSTANDARD LVCMOS33 [get_ports RST]
+
+set_property PACKAGE_PIN F18 [get_ports o_data]
+set_property IOSTANDARD LVCMOS33 [get_ports o_data]
+
+set_property PACKAGE_PIN D18 [get_ports h_sync]
+set_property IOSTANDARD LVCMOS33 [get_ports h_sync]
+
+set_property PACKAGE_PIN C17 [get_ports v_sync]
+set_property IOSTANDARD LVCMOS33 [get_ports v_sync]
+
+set_property PACKAGE_PIN R3 [get_ports p_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
+
+set_property PACKAGE_PIN F15 [get_ports o_sio_c]
+set_property IOSTANDARD LVCMOS33 [get_ports o_sio_c]
+
+set_property PACKAGE_PIN E16 [get_ports o_sio_d]
+set_property IOSTANDARD LVCMOS33 [get_ports o_sio_d]
 
 set_property IOSTANDARD LVCMOS33 [get_ports {i_data[7]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {i_data[6]}]
@@ -26,10 +47,6 @@ set_property PACKAGE_PIN U6 [get_ports {i_data[2]}]
 set_property PACKAGE_PIN V4 [get_ports {i_data[1]}]
 set_property PACKAGE_PIN V3 [get_ports {i_data[0]}]
 
-set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
-set_property IOSTANDARD LVCMOS33 [get_ports o_data]
-set_property IOSTANDARD LVCMOS33 [get_ports h_sync]
-
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[12]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[11]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[10]}]
@@ -45,8 +62,6 @@ set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[0]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[1]}]
 
 set_property PACKAGE_PIN P16 [get_ports o_clk_en]
-set_property IOSTANDARD LVCMOS33 [get_ports o_clk_en]
-set_property PACKAGE_PIN R16 [get_ports o_clk_en]
 set_property IOSTANDARD LVCMOS33 [get_ports o_clk_en]
 
 set_property PACKAGE_PIN N16 [get_ports o_dqm[1]]
@@ -127,13 +142,6 @@ set_property PACKAGE_PIN K18 [get_ports io_data[14]]
 set_property IOSTANDARD LVCMOS33 [get_ports io_data[14]]
 set_property PACKAGE_PIN J18 [get_ports io_data[15]]
 set_property IOSTANDARD LVCMOS33 [get_ports io_data[15]]
-
-set_property PACKAGE_PIN F18 [get_ports o_data]
-set_property IOSTANDARD LVCMOS33 [get_ports o_data]
-set_property PACKAGE_PIN D18 [get_ports h_sync]
-set_property IOSTANDARD LVCMOS33 [get_ports h_sync]
-set_property PACKAGE_PIN C17 [get_ports v_sync]
-set_property IOSTANDARD LVCMOS33 [get_ports v_sync]
 
 set_property CFGBVS VCCO [current_design]
 set_property CONFIG_VOLTAGE 3.3 [current_design]

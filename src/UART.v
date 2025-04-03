@@ -37,7 +37,7 @@ module UART #(
                 if (Counter_CurrTick < TicksPerBit - 1) begin
                     Counter_CurrTick <= Counter_CurrTick + 1;
                 end else begin // enough ticks, transmit
-                    Counter_CurrTick <= 0; // TODO : THINK ABOUT WHAT HAPPENS AFTER TRANSFER
+                    Counter_CurrTick <= 0;
                     o_data <= ShiftRegister[0];
                     ShiftRegister <= ShiftRegister >> 1;
                     Counter_CurrRegisterBit <= Counter_CurrRegisterBit + 1;

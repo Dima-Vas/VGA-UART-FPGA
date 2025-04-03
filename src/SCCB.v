@@ -85,8 +85,6 @@ module SCCB #(
                     Switch_TristateWrite <= 1'b1;
                     if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB) begin // to stabilize the clock before the setup
                         CurrentState <= START;
-                        Switch_ClockPhaseSCCB <= 1'b1;
-                        Counter_SystemClockTick <= 0;
                     end
                 end
                 START : begin
@@ -140,7 +138,6 @@ module SCCB #(
                             2 : begin // the register value, now STOP
                                 CurrentState <= STOP_RISE;
                                 Counter_CurrTransferCycle <= 2'b00;
-                                Counter_SystemClockTick <= 0;
                             end
                         endcase
                     end
@@ -165,7 +162,6 @@ module SCCB #(
                     if (i_ready) begin
                         Register_i_data <= i_data; // latch data
                         Register_i_addr <= i_addr;
-                        Counter_SystemClockTick <= 0;
                         Counter_CurrTransferCycle <= 2'b00;
                         CurrDataToTransfer <= AddressOV7670; // additionally, latch addr immediately
                         CurrentState <= SETUP; // starting the data transfer process

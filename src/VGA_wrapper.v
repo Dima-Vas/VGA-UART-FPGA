@@ -13,8 +13,13 @@ module VGA_wrapper #(
     parameter AddressWidthSDRAM = BankAddrLengthSDRAM + RowAddrLengthSDRAM + ColAddrLengthSDRAM
 )(
     input wire CLK, RST,
+    input wire p_clk,
     inout [WordLengthSDRAM-1:0] io_data,
-    output wire o_clk_en,                // Clock Enable
+    input wire h_sync, v_sync,
+    input [7:0] i_data,
+    output wire x_clk,                   // For OV7670
+    output wire o_sio_c, o_sio_d,        // SCCB wires
+    output wire o_clk_en,                // SDRAM Clock Enable
     output wire o_cs_n,                  // Select SDRAM signal
     output wire o_ras_n,                 // Select a row #o_addr
     output wire o_cas_n,                 // Select a column #o_addr
@@ -22,13 +27,13 @@ module VGA_wrapper #(
     output wire [12:0] o_addr,           // SDRAM's address bus
     output wire [1:0] o_bank,            // SDRAM's bank selector
     output wire [1:0] o_dqm,
-    input wire h_sync, v_sync, p_clk,
-    input [7:0] i_data,
     output wire o_data
 );
 
     localparam BurstLengthSDRAM = 8;
     localparam MaxBurstsWritten = (1<<AddressWidthSDRAM)/BurstLengthSDRAM;
+    
+    localparam ClockFrequencySCCB = 400_000; 
     
     wire [PixelBitWidth - 1:0] PixelFromVGA;
     wire [PixelBitWidth - 1:0] PixelFromSDRAM;
@@ -52,7 +57,6 @@ module VGA_wrapper #(
     assign io_data = (Switch_EnableSDRAM) ? InputDataToSDRAM : {WordLengthSDRAM{1'bz}};
 
     integer i;
-    
     
     reg [PixelBitWidth-1:0] PixelsForSDRAM [BurstLengthSDRAM-1:0];
     reg [$clog2(BurstLengthSDRAM)-1:0] Counter_PixelsForSDRAM;
@@ -81,6 +85,8 @@ module VGA_wrapper #(
         .p_clk(p_clk),
         .RST(RST),
         .h_sync(h_sync),
+        .o_sio_c(o_sio_c),
+        .o_sio_d(o_sio_d),
         .i_data(i_data),
         .o_data(PixelFromVGA),
         .o_ready(Switch_PixelFromVGAReady)
