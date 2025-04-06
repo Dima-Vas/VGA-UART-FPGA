@@ -5,11 +5,13 @@ create_clock -period 125.000 -name p_clk [get_ports p_clk]
 set_property PACKAGE_PIN R2 [get_ports CLK]
 set_property IOSTANDARD LVCMOS33 [get_ports CLK]
 
-set_property PACKAGE_PIN P4 [get_ports p_clk]
-set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
-
 set_property PACKAGE_PIN H18 [get_ports RST]
 set_property IOSTANDARD LVCMOS33 [get_ports RST]
+
+
+# ------------- OV7670 -------------
+set_property PACKAGE_PIN P4 [get_ports p_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports p_clk]
 
 set_property PACKAGE_PIN F18 [get_ports o_data]
 set_property IOSTANDARD LVCMOS33 [get_ports o_data]
@@ -47,6 +49,8 @@ set_property PACKAGE_PIN U6 [get_ports {i_data[2]}]
 set_property PACKAGE_PIN V4 [get_ports {i_data[1]}]
 set_property PACKAGE_PIN V3 [get_ports {i_data[0]}]
 
+
+# ------------- SDRAM -------------
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[12]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[11]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {o_addr[10]}]
@@ -143,9 +147,35 @@ set_property IOSTANDARD LVCMOS33 [get_ports io_data[14]]
 set_property PACKAGE_PIN J18 [get_ports io_data[15]]
 set_property IOSTANDARD LVCMOS33 [get_ports io_data[15]]
 
+
+# ------------- Timing constraints ---------
+set_input_delay -clock p_clk 6.0 [get_ports {i_data[*] h_sync v_sync}]
+set_input_delay -clock p_clk -min 2.0 [get_ports {i_data[*] h_sync v_sync}]
+
+set_output_delay -clock p_clk 6.0 [get_ports {o_sio_c o_sio_d}]
+set_output_delay -clock p_clk -min 2.0 [get_ports {o_sio_c o_sio_d}]
+
+set_output_delay -clock CLK 3.0 [get_ports {o_addr[*] o_bank[*] o_we_n o_cas_n o_ras_n o_cs_n o_dqm[*] io_data[*]}]
+set_output_delay -clock CLK -min 1.0 [get_ports {o_addr[*] o_bank[*] o_we_n o_cas_n o_ras_n o_cs_n o_dqm[*] io_data[*]}]
+
+set_input_delay -clock CLK 5.0 [get_ports io_data[*]]
+set_input_delay -clock CLK -min 2.0 [get_ports io_data[*]]
+
+set_input_delay -clock CLK 3.0 [get_ports RST]
+set_input_delay -clock CLK -min 1.0 [get_ports RST]
+
+set_input_delay -clock p_clk 3.0 [get_ports RST]
+set_input_delay -clock p_clk -min 1.0 [get_ports RST]
+
+set_output_delay -clock CLK 6.0 [get_ports o_data]
+set_output_delay -clock CLK -min 2.0 [get_ports o_data]
+
+# ------------- Misc -----------
 set_property CFGBVS VCCO [current_design]
 set_property CONFIG_VOLTAGE 3.3 [current_design]
 
 set_property SLEW FAST [get_ports o_data]
 set_property DRIVE 12 [get_ports o_data]
+
+set_clock_groups -asynchronous -group [get_clocks CLK] -group [get_clocks p_clk]
 

@@ -13,6 +13,7 @@ module Compressor #(
 )(
     input wire CLK, RST,
     input [PixelSize-1:0] i_pixel,
+    input wire i_uart_allowed,
     input wire i_ready, // a pixel is ready to be read from the FIFO
     output reg [7:0] o_frame,
     output reg o_ready

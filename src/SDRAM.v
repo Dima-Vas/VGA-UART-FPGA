@@ -7,7 +7,7 @@
 // - set the i_enable to 1, i_rw to 0 and i_data with the first word to write
 // - set the i_enable to 0 and wait for o_valid_wr to go 1
 // - switch the i_data to the next value to write until all 8 are written
-// To Read a brust of 8 words:
+// To Read a burst of 8 words:
 // - set the i_enable to 1, i_rw to 1 and i_addr with the first address to read
 // - set the i_enable to 0 and wait for o_valid_rd to go 1
 // - read the 8 words, one for each of the 8 subsequent clock ticks
@@ -26,7 +26,8 @@ module SDRAM #(
     input i_rw,                         // 0 for write, 1 for read
     input [AddressWidth-1:0] i_addr,    // Address to read from - 2 bank bits, 13 row bits, 9 col bits
     input [WordLength-1:0] i_data,      // Data to write to SDRAM
-    inout [WordLength-1:0] io_data,     // SDRAM's data bus
+    input [WordLength-1:0] i_sdram_data,
+    output [WordLength-1:0] o_sdram_data,
     output reg o_clk_en,                // Clock Enable
     output reg o_cs_n,                  // Select SDRAM signal
     output reg o_ras_n,                 // Select a row #o_addr
@@ -113,7 +114,7 @@ module SDRAM #(
                 SET_MODE_WAIT       = 2, // 2 clock cycles
                 REFRESH_PAUSE_WAIT  = 60 / ClockPeriod + 1, // 60ns + 1 for safety 
                 TRCD_PAUSE_WAIT     = 20 / ClockPeriod, // 20ns between ACTIVATE and READ/WRITE + 1 for safety
-                TCL_PAUSE_WAIT      = 15 / ClockPeriod, // 15ns
+                TCL_PAUSE_WAIT      = 2, // for CL = 3
                 TRP_PAUSE_WAIT      = PRECHARGE_ALL_WAIT; // 20ns between PRECHARGE and ACTIVE
     
     localparam REFRESH_AFTER_MSR_CYCLE = 8; // for W9825G6KH
@@ -127,13 +128,12 @@ module SDRAM #(
     
     reg [3:0] CurrentState, NextState;
     
-    reg Switch_OperationRead; // 0 for write, 1 for read
     reg [$clog2(BurstLength):0] Counter_BurstWordsLeft;
     reg [WordLength-1:0] Register_o_data;
 
     wire [WordLength-1:0] DataToReadFromSDRAM; // controller writes to SDRAM from here
     wire [WordLength-1:0] DataToWriteToSDRAM; // controller reads from SDRAM into here
-    reg Switch_TristateWriteToSDRAM;
+    reg Switch_OperationRead;
     
     // Multiplexed addresses requested by user on the i_addr
     reg [BankAddrLen-1:0] Register_BankAddrReq;
@@ -146,10 +146,7 @@ module SDRAM #(
     assign o_valid_wr = Register_o_valid_wr;
     assign o_valid_rd = Register_o_valid_rd;
 
-    assign io_data = Switch_TristateWriteToSDRAM ? DataToWriteToSDRAM : {WordLength{1'bz}};
-    assign DataToReadFromSDRAM = io_data;
-    assign DataToWriteToSDRAM = (Register_o_valid_wr) ? i_data : 0;
-    
+    assign o_sdram_data = i_data;
     assign o_busy = (CurrentState != IDLE || Switch_NeedToRefresh);
     assign o_data = Register_o_data;
     
@@ -161,7 +158,7 @@ module SDRAM #(
             Counter_WaitClocks <= INIT_PAUSE_WAIT; // 200ns for the initial pause
             Counter_BurstWordsLeft <= 0;
             Register_o_data <= 0;
-            Switch_TristateWriteToSDRAM <= 1'b0;
+            Switch_OperationRead <= 1'b0;
             Register_BankAddrReq <= 0;
             Register_RowAddrReq <= 0;
             Register_ColAddrReq <= 0;
@@ -174,12 +171,12 @@ module SDRAM #(
                 Register_RowAddrReq <= i_addr[AddressWidth-BankAddrLen-1 : AddressWidth-BankAddrLen-RowAddrLen];
                 Register_ColAddrReq <= i_addr[AddressWidth-BankAddrLen-RowAddrLen-1 : AddressWidth-BankAddrLen-RowAddrLen-ColAddrLen]; 
                 Counter_BurstWordsLeft <= BurstLength;
-                Switch_TristateWriteToSDRAM <= ~i_rw;
+                Switch_OperationRead <= i_rw;
             end else if (CurrentState == RW_WORD) begin
                 if (Counter_BurstWordsLeft > 0) begin
                     Counter_BurstWordsLeft <= Counter_BurstWordsLeft - 1;
-                        if (Switch_OperationRead) begin // READ latches into RW_WORD, WRITE latches always
-                        Register_o_data <= DataToReadFromSDRAM;
+                    if (Switch_OperationRead) begin // READ latches into RW_WORD, WRITE latches always
+                        Register_o_data <= i_sdram_data;
                     end
                 end
             end
@@ -206,7 +203,6 @@ module SDRAM #(
     always @(*) begin
         Counter_NextWaitClocks = 0;
         NextState = CurrentState;
-        Switch_OperationRead = i_rw;
         SetNOP();
         o_addr = 0;
         o_bank = 0;
@@ -217,7 +213,6 @@ module SDRAM #(
         case (CurrentState)
             INIT_PAUSE : begin
                 SetNOP();
-                o_clk_en = 1'b1;
                 o_dqm = 2'b11;
                 if (Counter_WaitClocks == 0) begin
                     NextState = PRECHARGE_ALL;
