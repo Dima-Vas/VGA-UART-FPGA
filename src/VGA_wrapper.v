@@ -84,17 +84,17 @@ module VGA_wrapper #(
     wire Switch_FacadeOutputReady;
     reg Switch_FacadeReadRequested;
     
-    reg [PixelBitWidth-1:0] CompressorCurrInput;
-    reg [PixelBitWidth-1:0] CompressorLastInput;
+    wire [PixelBitWidth-1:0] CompressorCurrInput;
+    wire [PixelBitWidth-1:0] CompressorLastInput;
     
     reg [$clog2(FrameHeight)-1:0] Counter_RowCurrentFrame;
     reg [$clog2(FrameHeight)-1:0] Counter_RowLastFrame;
     
-    reg Switch_CompressorCurrRowFull;
-    reg Switch_CompressorLastRowFull;
-    reg Switch_CompressorCurrEmptyFIFO;
-    reg Switch_CompressorLastEmptyFIFO;
-    reg Switch_CompressorReady;
+    wire Switch_CompressorCurrRowFull;
+    wire Switch_CompressorLastRowFull;
+    wire Switch_CompressorCurrEmptyFIFO;
+    wire Switch_CompressorLastEmptyFIFO;
+    wire Switch_CompressorReady;
     reg Switch_FirstFrame;
     
     reg [$clog2(FrameWidth)-1:0] j;
@@ -198,7 +198,7 @@ module VGA_wrapper #(
         .o_fetch_last(Switch_CompressorLastInput),
         .o_curr_row_full(Switch_CompressorCurrRowFull),
         .o_last_row_full(Switch_CompressorLastRowFull),
-        .o_ready(Switch_CompressorReady),
+        .o_ready_for_next(Switch_CompressorReady),
         .o_frame(CompressedFrame),
         .o_uart_ready(Switch_SendFrameUART)
     );
