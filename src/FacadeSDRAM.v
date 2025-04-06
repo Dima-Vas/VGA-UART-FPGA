@@ -8,7 +8,7 @@ module FacadeSDRAM #(
     parameter AddressWidthSDRAM = 24
 )(
     input wire CLK, RST,
-    input wire i_ready, // i_pixel is ready to be read
+    input wire i_write_req, // i_pixel is ready to be read
     input [PixelBitWidth-1:0] i_pixel, // pixels to write
     input wire i_read_req, // user requests a read
     
@@ -24,14 +24,17 @@ module FacadeSDRAM #(
     output wire [PixelBitWidth-1:0] o_pixel, // pixel for user from SDRAM
     output wire o_ready, // user can latch the read pixel
     
-    output wire o_busy_rd, // user cannot request read - facade's READ is busy
-    output wire o_busy_wr // user cannot request write - facade's WRITE is busy
+    output wire o_busy_rd, // user cannot request read
+    output wire o_busy_wr // user cannot request write
 );
 
     localparam WRITE = 2'b00, READ =  2'b01, IDLE = 2'b10;
     
     wire [AddressWidthSDRAM-1:0] o_sdram_addr_rd;
     wire [AddressWidthSDRAM-1:0] o_sdram_addr_wr;
+    
+    wire WriteOngoing;
+    wire ReadOngoing;
 
     wire o_bursting_wr;
 
@@ -44,7 +47,7 @@ module FacadeSDRAM #(
             case (CurrentOperation)
                 IDLE: begin
                     if (!i_sdram_busy) begin
-                        if (i_ready) begin
+                        if (i_write_req) begin
                             CurrentOperation <= WRITE;
                         end else if (i_read_req) begin
                             CurrentOperation <= READ;
@@ -73,6 +76,9 @@ module FacadeSDRAM #(
     
     assign o_sdram_enable = (CurrentOperation == READ || (CurrentOperation == WRITE && o_bursting_wr)) ? 1'b1 : 1'b0; 
         
+    assign o_busy_wr = (~i_sdram_busy && ~WriteOngoing);
+    assign o_busy_rd = (~i_sdram_busy && ~ReadOngoing);
+        
     ReadControllerSDRAM #(
         FrameWidth,
         FrameHeight,
@@ -88,7 +94,7 @@ module FacadeSDRAM #(
         .o_sdram_addr(o_sdram_addr_rd),
         .o_pixel(o_pixel),
         .o_ready(o_ready),
-        .o_busy_rd(o_busy_rd)
+        .o_busy_rd(ReadOngoing)
     );
     
     WriteControllerSDRAM #(
@@ -100,12 +106,12 @@ module FacadeSDRAM #(
     ) write (
         .CLK(CLK),
         .RST(RST),
-        .i_ready(i_ready),
+        .i_write_req(i_write_req),
         .i_sdram_valid_wr(i_sdram_valid_wr && CurrentOperation == WRITE),
         .i_pixel(i_pixel),
         .o_sdram_pixel(o_sdram_pixel),
         .o_sdram_addr(o_sdram_addr_wr),
-        .o_busy_wr(o_busy_wr),
+        .o_busy_wr(WriteOngoing),
         .o_bursting(o_bursting_wr)
     );
     

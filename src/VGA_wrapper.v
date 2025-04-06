@@ -31,6 +31,9 @@ module VGA_wrapper #(
     output wire [1:0] o_dqm,
     output wire o_data
 );
+
+    localparam COLLECT_CURR_ROW = 2'b00, COLLECT_LAST_ROW = 2'b01, IDLE = 2'b10;
+    reg CurrentState;
     
     localparam ClockFrequencySCCB = 400_000;
     
@@ -76,58 +79,68 @@ module VGA_wrapper #(
     wire Switch_FacadeWriteBusy;
     
     reg [PixelBitWidth-1:0] FacadeInput;
-    reg Switch_FacadeInputReady;
+    reg Switch_FacadeWriteRequested;
     wire [PixelBitWidth-1:0] FacadeOutput;
     wire Switch_FacadeOutputReady;
     reg Switch_FacadeReadRequested;
     
-    // IDEA : we store the nth row we are reading now, comparing it to the
-    // nth row from the previous frame. Dynamically detecting the differences
-    // out of the threshold, we send the pixels that differ to be compressed to the Compressor
-    reg [PixelBitWidth-1:0] RowCurrentFrame [FrameWidth-1:0];
+    reg [PixelBitWidth-1:0] CompressorCurrInput;
+    reg [PixelBitWidth-1:0] CompressorLastInput;
+    
     reg [$clog2(FrameHeight)-1:0] Counter_RowCurrentFrame;
-    reg [$clog2(FrameWidth)-1:0] Counter_ColCurrentFrame;
-    reg [PixelBitWidth-1:0] RowLastFrame [FrameWidth-1:0];
     reg [$clog2(FrameHeight)-1:0] Counter_RowLastFrame;
-    reg [$clog2(FrameWidth)-1:0] Counter_ColLastFrame;
-
-    // Need to implement a read into a burst I will write to an SDRAM
+    
+    reg Switch_CompressorCurrRowFull;
+    reg Switch_CompressorLastRowFull;
+    reg Switch_CompressorCurrEmptyFIFO;
+    reg Switch_CompressorLastEmptyFIFO;
+    reg Switch_CompressorReady;
+    reg Switch_FirstFrame;
+    
+    reg [$clog2(FrameWidth)-1:0] j;
+    
     // TODO : add a switch to track the drop of a frame in case SDRAM is "full"
     always @(posedge CLK) begin
         if (!RST) begin
             Switch_EnableReadFromFIFO <= 1'b0;
-            Switch_FacadeInputReady <= 1'b0;
+            Switch_FacadeWriteRequested <= 1'b0;
             Switch_FacadeReadRequested <= 1'b0;
+            Counter_RowLastFrame <= 0;
+            Counter_RowCurrentFrame <= 0;
+            CurrentState <= COLLECT_CURR_ROW;
+            Switch_FirstFrame <= 1'b1;
         end else begin
             Switch_EnableReadFromFIFO <= 1'b0;
-            Switch_FacadeInputReady <= 1'b0;
+            Switch_FacadeWriteRequested <= 1'b0;
             Switch_FacadeReadRequested <= 1'b0;
             
-            // A current frame's row is written to SDRAM and recorded locally
-            if (Counter_ColCurrentFrame < FrameWidth) begin // this row still goes on
-                if (!Switch_FacadeWriteBusy && !Switch_EmptyFIFO) begin // if youre able, read
-                    Switch_EnableReadFromFIFO <= 1'b1; 
-                    FacadeInput <= PixelFromFIFO; // this FIFO is FWFT
-                    RowCurrentFrame[Counter_ColCurrentFrame] <= PixelFromFIFO; // also record this for comparison
-                    Counter_ColCurrentFrame <= Counter_ColCurrentFrame + 1;
-                    Switch_FacadeInputReady <= 1'b1;
+            case (CurrentState)
+                COLLECT_CURR_ROW : begin
+                    if (Switch_CompressorCurrRowFull) begin
+                        Counter_RowCurrentFrame <= Counter_RowCurrentFrame + 1;
+                        CurrentState <= COLLECT_LAST_ROW;
+                    end else if (!Switch_FacadeWriteBusy && !Switch_EmptyFIFO) begin
+                        Switch_EnableReadFromFIFO <= 1'b1; 
+                        FacadeInput <= PixelFromFIFO; // this FIFO is FWFT
+                        Switch_FacadeWriteRequested <= 1'b1;
+                    end
                 end
-            end else begin
-                Counter_RowCurrentFrame <= Counter_RowCurrentFrame + 1;
-            end
-            
-            // A previous frame's row is read from SDRAM for comparison with a current row
-            if (Counter_ColLastFrame < FrameWidth) begin
-                if (!Switch_FacadeReadBusy) begin
-                    Switch_FacadeReadRequested <= 1'b1;
+                COLLECT_LAST_ROW : begin
+                    if (Switch_CompressorLastRowFull || Switch_FirstFrame) begin
+                        Counter_RowLastFrame <= Counter_RowLastFrame + 1;
+                        CurrentState <= IDLE;
+                    end else if (!Switch_FacadeReadBusy) begin
+                        Switch_FacadeReadRequested <= 1'b1;
+                    end
                 end
-                if (Switch_FacadeOutputReady) begin
-                    RowLastFrame[Counter_ColLastFrame] <= FacadeOutput;
-                    Counter_ColLastFrame <= Counter_ColLastFrame + 1;
+                IDLE : begin // while compressor is transferring data to UART
+                    Switch_FirstFrame <= 1'b0;
+                    if (Switch_CompressorReady) begin
+                        CurrentState <= COLLECT_CURR_ROW;
+                    end
                 end
-            end else begin
-                Counter_RowLastFrame <= Counter_RowLastFrame + 1;
-            end
+            endcase
+                      
         end
     end
     
@@ -153,6 +166,43 @@ module VGA_wrapper #(
         .empty(Switch_EmptyFIFO)
     );
     
+    fifo_generator_1 SDRAM_COMPRESSOR_CURR_FIFO (
+        .clk(CLK),
+        .srst(RST),
+        .wr_en(Switch_EnableReadFromFIFO),
+        .din(PixelFromFIFO),
+        .rd_en(Switch_CompressorCurrInput),
+        .dout(CompressorCurrInput),
+        .empty(Switch_CompressorCurrEmptyFIFO)
+    );
+    
+    fifo_generator_1 SDRAM_COMPRESSOR_LAST_FIFO (
+        .clk(CLK),
+        .srst(RST),
+        .wr_en(Switch_FacadeOutputReady),
+        .din(FacadeOutput),
+        .rd_en(Switch_CompressorLastInput),
+        .dout(CompressorLastInput),
+        .empty(Switch_CompressorLastEmptyFIFO)
+    );
+    
+    Compressor #(FrameWidth, PixelBitWidth) compressor (
+        .CLK(CLK),
+        .RST(RST),
+        .i_pixel_curr(CompressorCurrInput),
+        .i_pixel_last(CompressorLastInput),
+        .i_curr_empty(Switch_CompressorCurrEmptyFIFO),
+        .i_last_empty(Switch_CompressorLastEmptyFIFO),
+        .i_uart_allowed(Switch_CanSendFrameUART),
+        .o_fetch_curr(Switch_CompressorCurrInput),
+        .o_fetch_last(Switch_CompressorLastInput),
+        .o_curr_row_full(Switch_CompressorCurrRowFull),
+        .o_last_row_full(Switch_CompressorLastRowFull),
+        .o_ready(Switch_CompressorReady),
+        .o_frame(CompressedFrame),
+        .o_uart_ready(Switch_SendFrameUART)
+    );
+    
     FacadeSDRAM #(FrameWidth,
                   FrameHeight,
                   BurstLengthSDRAM,
@@ -160,7 +210,7 @@ module VGA_wrapper #(
                   AddressWidthSDRAM) facade (
         .CLK(CLK),
         .RST(RST),
-        .i_ready(Switch_FacadeInputReady),
+        .i_write_req(Switch_FacadeWriteRequested),
         .i_pixel(FacadeInput),
         .i_read_req(Switch_FacadeReadRequested),
         .i_sdram_busy(Switch_BusySDRAM),
@@ -204,16 +254,6 @@ module VGA_wrapper #(
         .o_valid_wr(Switch_ValidWriteToSDRAM),
         .o_valid_rd(Switch_ValidReadFromSDRAM),
         .o_busy(Switch_BusySDRAM)
-    );
-    
-    Compressor #(FrameWidth, PixelBitWidth) compressor (
-        .CLK(CLK),
-        .RST(RST),
-        .i_pixel(),
-        .i_ready(Switch_PixelForCompressorReady),
-        .i_uart_allowed(Switch_CanSendFrameUART),
-        .o_frame(CompressedFrame),
-        .o_ready(Switch_SendFrameUART)
     );
     
     UART #(ClockFrequency, BaudRateUART, BufferSizeUART) uart(

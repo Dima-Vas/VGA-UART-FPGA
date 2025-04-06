@@ -8,7 +8,7 @@ module WriteControllerSDRAM #(
     parameter AddressWidthSDRAM = 24
 )(
     input wire CLK, RST,
-    input wire i_ready,
+    input wire i_write_req,
     input wire i_sdram_valid_wr,
     input [PixelBitWidth-1:0] i_pixel,
 
@@ -48,7 +48,7 @@ module WriteControllerSDRAM #(
         end else begin
             case (CurrentState)
                 IDLE : begin
-                    if (i_ready) begin
+                    if (i_write_req) begin
                         PixelsForSDRAM[Counter_PixelsForSDRAM] <= i_pixel;
                         Counter_PixelsForSDRAM <= Counter_PixelsForSDRAM + 1;
                         CurrentState <= (Counter_PixelsForSDRAM + 1 == BurstLengthSDRAM) ? BURST_START : IDLE;
