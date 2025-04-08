@@ -32,6 +32,8 @@ module VGA #(
     wire SCCB_o_busy;
     
     reg Switch_SetupSCCB;
+    reg Register1_Switch_SetupSCCB;
+    reg Register2_Switch_SetupSCCB;
     
     reg [7:0] SetupAddrSCCB;
     reg [7:0] SetupDataSCCB;
@@ -43,15 +45,36 @@ module VGA #(
             Counter_BitsRead <= 0;
             o_data <= 0;
             o_ready <= 1'b0;
-            Counter_CurrTransferSCCB <= 0;
-            Switch_SetupSCCB <= 1'b1;
+        end else begin
+            Register1_Switch_SetupSCCB <= Switch_SetupSCCB;
+            Register2_Switch_SetupSCCB <= Register1_Switch_SetupSCCB;
+            if (!Register2_Switch_SetupSCCB) begin 
+                if (h_sync) begin
+                    o_data[Counter_BitsRead + 7 -: 8] <= i_data; // YU or YV
+                    Counter_BitsRead <= Counter_BitsRead + 8;
+                    if (Counter_BitsRead + 8 >= PixelBitWidth) begin // pixel is read
+                        o_ready <= 1'b1;
+                        Counter_BitsRead <= 0;
+                    end else begin
+                        o_ready <= 1'b0;
+                    end 
+                end else begin
+                    o_ready <= 1'b0; // in case h_sync is low but o_ready is not nullified
+                end
+            end
+        end
+    end
+    
+    always @(posedge CLK) begin
+        if (!RST) begin
             SCCB_i_ready <= 1'b0;
-        end else if (Switch_SetupSCCB) begin
-            if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
-                SCCB_i_ready <= 1'b0;
-                Counter_CurrTransferSCCB <= Counter_CurrTransferSCCB + 1;
-            end else begin
-                if (!SCCB_o_busy) begin
+            Switch_SetupSCCB <= 1'b1;
+        end else begin
+            if (Switch_SetupSCCB) begin
+                if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
+                    SCCB_i_ready <= 1'b0;
+                    Counter_CurrTransferSCCB <= Counter_CurrTransferSCCB + 1;
+                end else if (!SCCB_o_busy) begin
                     if (Counter_CurrTransferSCCB == TransferNumberSCCB) begin
                         Switch_SetupSCCB <= 1'b0;
                     end else begin
@@ -60,20 +83,6 @@ module VGA #(
                         SCCB_i_ready <= 1'b1;
                     end
                 end
-            end
-        end else begin
-            SCCB_i_ready <= 1'b0;
-            if (h_sync) begin
-                o_data[Counter_BitsRead + 7 -: 8] <= i_data; // YU or YV
-                Counter_BitsRead <= Counter_BitsRead + 8;
-                if (Counter_BitsRead + 8 >= PixelBitWidth) begin // pixel is read
-                    o_ready <= 1'b1;
-                    Counter_BitsRead <= 0;
-                end else begin
-                    o_ready <= 1'b0;
-                end 
-            end else begin
-                o_ready <= 1'b0; // in case h_sync is low but o_ready is not nullified
             end
         end
     end
