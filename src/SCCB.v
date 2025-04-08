@@ -18,7 +18,7 @@ module SCCB #(
     localparam AddressOV7670 = 8'h42;
 
     localparam ClockHalfPeriodSCCB = ClockFrequency / ClockFrequencySCCB / 2;
-    integer Counter_SystemClockTick;
+    reg [$clog2(ClockHalfPeriodSCCB)-1:0] Counter_SystemClockTick;
     reg Switch_ClockPhaseSCCB;
     
     reg Switch_TristateWrite;

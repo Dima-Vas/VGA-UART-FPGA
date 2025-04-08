@@ -4,11 +4,16 @@
 // A VGA hardware management module, outputs the Y+U/V pixel pair, MSB first. 
 // ----------
 module VGA #(
-    parameter ClockFrequencyPCLK = 50_000_000,
-    parameter ClockFrequencySCCB = 400_000,
-    parameter PixelBitWidth = 16
+    parameter ClockFrequency = 50_000_000,
+    parameter ClockFrequencyPCLK = 6_144_000,
+    parameter ClockFrequencySCCB = 200_000,
+    parameter PixelBitWidth = 16,
+    parameter FrameWidth = 640,
+    parameter FrameHeight = 480,
+    parameter ActiveFrameWidth = 512,
+    parameter ActiveFrameHeight = 384
 )(
-    input wire p_clk, RST,
+    input wire CLK, p_clk, RST,
     input wire h_sync,
     input [7:0] i_data,
     inout o_sio_d,
@@ -32,7 +37,7 @@ module VGA #(
     reg [7:0] SetupDataSCCB;
     
     reg [$clog2(TransferNumberSCCB)-1:0] Counter_CurrTransferSCCB;
-
+    
     always @(posedge p_clk) begin
         if (!RST) begin
             Counter_BitsRead <= 0;
@@ -40,6 +45,7 @@ module VGA #(
             o_ready <= 1'b0;
             Counter_CurrTransferSCCB <= 0;
             Switch_SetupSCCB <= 1'b1;
+            SCCB_i_ready <= 1'b0;
         end else if (Switch_SetupSCCB) begin
             if (SCCB_i_ready && SCCB_o_busy) begin // SCCB module took the input
                 SCCB_i_ready <= 1'b0;
@@ -60,7 +66,7 @@ module VGA #(
             if (h_sync) begin
                 o_data[Counter_BitsRead + 7 -: 8] <= i_data; // YU or YV
                 Counter_BitsRead <= Counter_BitsRead + 8;
-                if (Counter_BitsRead + 8 >= PixelBitWidth) begin // row is read
+                if (Counter_BitsRead + 8 >= PixelBitWidth) begin // pixel is read
                     o_ready <= 1'b1;
                     Counter_BitsRead <= 0;
                 end else begin
@@ -71,7 +77,7 @@ module VGA #(
             end
         end
     end
-    
+        
     always @(*) begin // ugly, but the best way to declare the byte array in Verilog
         case (Counter_CurrTransferSCCB)
             0: begin SetupAddrSCCB = 8'h12; SetupDataSCCB = 8'h80; end
@@ -89,8 +95,8 @@ module VGA #(
         endcase
     end
     
-    SCCB #(ClockFrequencyPCLK, ClockFrequencySCCB) sccb(
-        .CLK(p_clk),
+    SCCB #(ClockFrequency, ClockFrequencySCCB) sccb(
+        .CLK(CLK),
         .RST(RST),
         .i_data(SCCB_i_data),
         .i_addr(SCCB_i_addr),
