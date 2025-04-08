@@ -47,7 +47,7 @@ module VGA #(
             Switch_SetupSCCB <= 1'b1;
             SCCB_i_ready <= 1'b0;
         end else if (Switch_SetupSCCB) begin
-            if (SCCB_i_ready && SCCB_o_busy) begin // SCCB module took the input
+            if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
                 SCCB_i_ready <= 1'b0;
                 Counter_CurrTransferSCCB <= Counter_CurrTransferSCCB + 1;
             end else begin
