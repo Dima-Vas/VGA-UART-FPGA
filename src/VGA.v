@@ -40,16 +40,21 @@ module VGA #(
     
     reg [$clog2(TransferNumberSCCB)-1:0] Counter_CurrTransferSCCB;
     
+    (* keep = "true" *) reg [31:0] Counter_PCLK;
+    (* keep = "true" *) reg [31:0] Counter_HSYNC;
+    
     always @(posedge p_clk) begin
         if (!RST) begin
             Counter_BitsRead <= 0;
             o_data <= 0;
             o_ready <= 1'b0;
         end else begin
+            Counter_PCLK <= Counter_PCLK + 1;
             Register1_Switch_SetupSCCB <= Switch_SetupSCCB;
             Register2_Switch_SetupSCCB <= Register1_Switch_SetupSCCB;
             if (!Register2_Switch_SetupSCCB) begin 
                 if (h_sync) begin
+                    Counter_HSYNC <= Counter_HSYNC + 1;
                     o_data[Counter_BitsRead + 7 -: 8] <= i_data; // YU or YV
                     Counter_BitsRead <= Counter_BitsRead + 8;
                     if (Counter_BitsRead + 8 >= PixelBitWidth) begin // pixel is read
@@ -69,6 +74,8 @@ module VGA #(
         if (!RST) begin
             SCCB_i_ready <= 1'b0;
             Switch_SetupSCCB <= 1'b1;
+            Counter_PCLK <= 0;
+            Counter_HSYNC <= 0;
         end else begin
             if (Switch_SetupSCCB) begin
                 if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input

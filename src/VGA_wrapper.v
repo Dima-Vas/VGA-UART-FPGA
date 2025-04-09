@@ -76,8 +76,8 @@ module VGA_wrapper #(
       for (i = 0; i < WordLengthSDRAM; i = i + 1) begin
         IOBUF iobuf_inst (
           .IO(io_data[i]),
-          .I(i_sdram_data[i]),
-          .O(o_sdram_data[i]),
+          .I(o_sdram_data[i]),
+          .O(i_sdram_data[i]),
           .T(Switch_EnableReadSDRAM)
         );
       end
@@ -108,6 +108,10 @@ module VGA_wrapper #(
     reg [$clog2(FrameWidth)-1:0] CurrX, MinX = FrameWidth - ActiveFrameWidth, MaxX = ActiveFrameWidth;
     wire Switch_ActiveRow = (CurrY < MaxY) && (CurrY > MinY) && (CurrX < MaxX) && (CurrX > MinX);
     
+    (* keep = "true" *) reg [31:0] Counter_CLK;
+    (* keep = "true" *) reg [31:0] Counter_XCLK;
+    (* keep = "true" *) reg [31:0] Counter_VSYNC;
+    
         
     // TODO : add a switch to track the drop of a frame in case SDRAM is "full"
     always @(posedge CLK) begin
@@ -117,12 +121,16 @@ module VGA_wrapper #(
             CurrentState <= COLLECT_CURR_ROW;
             Switch_FirstFrame <= 1'b1;
             CurrY <= 0;
+            Counter_CLK <= 0;
+            Counter_XCLK <= 0;
+            Counter_VSYNC <= 0;
         end else begin
             Switch_EnableReadFromFIFO <= 1'b0;
             Switch_FacadeWriteRequested <= 1'b0;
             Switch_FacadeReadRequested <= 1'b0;
             
             if (v_sync) begin
+                Counter_VSYNC <= Counter_VSYNC + 1;
                 CurrY <= 0;
             end else if (CurrX == FrameWidth) begin
                 CurrY <= CurrY + 1;
@@ -155,6 +163,14 @@ module VGA_wrapper #(
                 end
             endcase        
         end
+    end
+    
+    always @(posedge CLK) begin
+        Counter_CLK <= Counter_CLK + 1;
+    end
+    
+    always @(posedge x_clk) begin
+        Counter_XCLK <= Counter_XCLK + 1;
     end
     
     clk_wiz_0 WIZ_XCLK (

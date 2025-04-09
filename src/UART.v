@@ -30,6 +30,8 @@ module UART #(
     
     assign o_ready = ((Counter_BufferHead + 1) != Counter_BufferTail);
     
+     (* keep = "true" *) reg [31:0] Counter_UART;
+    
     always @(posedge CLK) begin
         if (!RST) begin        
             ShiftRegister <= 10'b1111111111;
@@ -39,10 +41,12 @@ module UART #(
             o_data <= 1'b1;
             Counter_BufferTail <= 0;
             Counter_BufferHead <= 0;
+            Counter_UART <= 0;
         end else begin
             if (i_ready && o_ready) begin
                 FrameBuffer[Counter_BufferHead] <= i_frame;
                 Counter_BufferHead <= Counter_BufferHead + 1;
+                Counter_UART <= Counter_UART + 1;
             end
             if (!Switch_Sending && (Counter_BufferHead != Counter_BufferTail)) begin
                 ShiftRegister <= {1'b1, FrameBuffer[Counter_BufferTail], 1'b0};
