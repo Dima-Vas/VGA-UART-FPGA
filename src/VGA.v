@@ -18,13 +18,15 @@ module VGA #(
     input [7:0] i_data,
     inout o_sio_d,
     output wire o_sio_c,
-    output reg [PixelBitWidth-1:0] o_data,
-    output reg o_ready
+    output wire [PixelBitWidth-1:0] o_data,
+    output wire o_ready
 );
     
     localparam TransferNumberSCCB = 11; 
 
-    reg [$clog2(PixelBitWidth)-1:0] Counter_BitsRead;
+    reg Switch_FirstByteRead;
+    reg Switch_PixelReady;
+    reg [PixelBitWidth-1:0] Pixel;
     
     reg [7:0] SCCB_i_data;
     reg [7:0] SCCB_i_addr;
@@ -45,38 +47,46 @@ module VGA #(
     
     always @(posedge p_clk) begin
         if (!RST) begin
-            Counter_BitsRead <= 0;
-            o_data <= 0;
-            o_ready <= 1'b0;
+            Switch_FirstByteRead <= 1'b0;
+            Pixel <= 0;
+            Switch_PixelReady <= 1'b0;
+            Counter_PCLK <= 0;
         end else begin
-            Counter_PCLK <= Counter_PCLK + 1;
             Register1_Switch_SetupSCCB <= Switch_SetupSCCB;
             Register2_Switch_SetupSCCB <= Register1_Switch_SetupSCCB;
-            if (!Register2_Switch_SetupSCCB) begin 
-                if (h_sync) begin
-                    Counter_HSYNC <= Counter_HSYNC + 1;
-                    o_data[Counter_BitsRead + 7 -: 8] <= i_data; // YU or YV
-                    Counter_BitsRead <= Counter_BitsRead + 8;
-                    if (Counter_BitsRead + 8 >= PixelBitWidth) begin // pixel is read
-                        o_ready <= 1'b1;
-                        Counter_BitsRead <= 0;
-                    end else begin
-                        o_ready <= 1'b0;
-                    end 
+            if (!Register2_Switch_SetupSCCB) begin
+                if (Switch_FirstByteRead == 1'b0) begin
+                  Pixel[15:8] <= i_data;
+                  Switch_PixelReady <= 1'b0;
+                  Switch_FirstByteRead <= 1'b1;
                 end else begin
-                    o_ready <= 1'b0; // in case h_sync is low but o_ready is not nullified
+                  Pixel[7:0] <= i_data;
+                  Switch_PixelReady <= 1'b1;
+                  Switch_FirstByteRead <= 1'b0;
                 end
-            end
+            end else begin
+              Switch_PixelReady <= 1'b0;
+            end 
         end
     end
+    
+    reg Register_Switch_PixelReady;
+    reg Register2_Switch_PixelReady;
+    reg [PixelBitWidth-1:0] Register_Pixel;
+    
+    assign o_ready = (Register2_Switch_PixelReady == 1'b0 && Register_Switch_PixelReady == 1'b1) ? 1'b1 : 1'b0;
+    assign o_data = Register_Pixel;
     
     always @(posedge CLK) begin
         if (!RST) begin
             SCCB_i_ready <= 1'b0;
             Switch_SetupSCCB <= 1'b1;
-            Counter_PCLK <= 0;
             Counter_HSYNC <= 0;
+            Register_Switch_PixelReady <= 1'b0;
         end else begin
+            Register_Switch_PixelReady <= Switch_PixelReady;
+            Register2_Switch_PixelReady <= Register_Switch_PixelReady;
+            Register_Pixel <= Pixel;
             if (Switch_SetupSCCB) begin
                 if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
                     SCCB_i_ready <= 1'b0;

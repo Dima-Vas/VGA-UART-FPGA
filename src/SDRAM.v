@@ -143,11 +143,13 @@ module SDRAM #(
     reg Register_o_valid_wr;
     reg Register_o_valid_rd;
     
+    reg Register_o_busy;
+    
     assign o_valid_wr = Register_o_valid_wr;
     assign o_valid_rd = Register_o_valid_rd;
+    assign o_busy = Register_o_busy;
 
     assign o_sdram_data = i_data;
-    assign o_busy = (CurrentState != IDLE || Switch_NeedToRefresh);
     assign o_data = Register_o_data;
     
     assign Switch_NeedToRefresh = (Counter_TimeToNextRefresh >= REFRESH_REGULAR_PERIOD) ? 1'b1 : 1'b0;
@@ -165,6 +167,7 @@ module SDRAM #(
             Switch_RefreshIsMSR <= 1'b0;
             Counter_RefreshCyclesDone <= 0;
             Counter_TimeToNextRefresh <= 0;
+            Register_o_busy <= 1'b0;
         end else begin
             if (CurrentState == IDLE && NextState == ACTIVATE) begin
                 Register_BankAddrReq <= i_addr[AddressWidth-1 : AddressWidth-BankAddrLen];
@@ -195,6 +198,7 @@ module SDRAM #(
             end else begin
                 Counter_WaitClocks <= Counter_WaitClocks - 1;
             end
+            Register_o_busy <= (CurrentState != IDLE || Switch_NeedToRefresh);
             CurrentState <= NextState;
             Counter_TimeToNextRefresh <= (Counter_TimeToNextRefresh >= REFRESH_REGULAR_PERIOD) ? 0 : Counter_TimeToNextRefresh + 1;
         end
@@ -267,7 +271,7 @@ module SDRAM #(
                 if (Switch_NeedToRefresh) begin
                     NextState = REFRESH;
                     Counter_NextWaitClocks = 0;
-                end else if (i_enable && !o_busy) begin
+                end else if (i_enable) begin
                     NextState = ACTIVATE;
                     Counter_NextWaitClocks = 0; // just launch ACTIVATE
                 end

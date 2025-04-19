@@ -4,7 +4,7 @@ module VGA_wrapper #(
     parameter ClockFrequency = 50_000_000,
     parameter ClockFrequencyXCLK = 12_500_000,
     parameter ClockFrequencyPCLK = 6_144_000,
-    parameter ClockFrequencySCCB = 200_000,
+    parameter ClockFrequencySCCB = 100_000,
     parameter FrameWidth = 640,
     parameter FrameHeight = 480,
     parameter ActiveFrameWidth = 512,
@@ -46,7 +46,7 @@ module VGA_wrapper #(
     wire [AddressWidthSDRAM-1:0] AddressToSDRAM;
     
     wire Switch_PixelFromVGAReady;
-
+    
     wire [7:0] CompressedFrame;
     wire Switch_SendFrameUART;  
     wire Switch_CanSendFrameUART;  
@@ -102,17 +102,10 @@ module VGA_wrapper #(
     wire Switch_CompressorReady;
     reg Switch_FirstFrame;
     
-    reg [$clog2(FrameWidth)-1:0] j;
+    (* keep = "true" *) reg [$clog2(FrameHeight)-1:0] CurrY, MinY = FrameHeight - ActiveFrameHeight, MaxY = ActiveFrameHeight;
+    (* keep = "true" *) reg [$clog2(FrameWidth)-1:0] CurrX, MinX = FrameWidth - ActiveFrameWidth, MaxX = ActiveFrameWidth;
+    (* keep = "true" *) wire Switch_ActiveRow = (CurrY < MaxY) && (CurrY > MinY) && (CurrX < MaxX) && (CurrX > MinX);
     
-    reg [$clog2(FrameHeight)-1:0] CurrY, MinY = FrameHeight - ActiveFrameHeight, MaxY = ActiveFrameHeight;
-    reg [$clog2(FrameWidth)-1:0] CurrX, MinX = FrameWidth - ActiveFrameWidth, MaxX = ActiveFrameWidth;
-    wire Switch_ActiveRow = (CurrY < MaxY) && (CurrY > MinY) && (CurrX < MaxX) && (CurrX > MinX);
-    
-    (* keep = "true" *) reg [31:0] Counter_CLK;
-    (* keep = "true" *) reg [31:0] Counter_XCLK;
-    (* keep = "true" *) reg [31:0] Counter_VSYNC;
-    
-        
     // TODO : add a switch to track the drop of a frame in case SDRAM is "full"
     always @(posedge CLK) begin
         if (!RST) begin
@@ -120,30 +113,17 @@ module VGA_wrapper #(
             Switch_FacadeReadRequested <= 1'b0;
             CurrentState <= COLLECT_CURR_ROW;
             Switch_FirstFrame <= 1'b1;
-            CurrY <= 0;
-            Counter_CLK <= 0;
-            Counter_XCLK <= 0;
-            Counter_VSYNC <= 0;
         end else begin
             Switch_EnableReadFromFIFO <= 1'b0;
             Switch_FacadeWriteRequested <= 1'b0;
             Switch_FacadeReadRequested <= 1'b0;
             
-            if (v_sync) begin
-                Counter_VSYNC <= Counter_VSYNC + 1;
-                CurrY <= 0;
-            end else if (CurrX == FrameWidth) begin
-                CurrY <= CurrY + 1;
-                CurrX <= 0;
-            end else if (Switch_PixelFromVGAReady) begin
-                CurrX <= CurrX + 1;
-            end
             case (CurrentState)
                 COLLECT_CURR_ROW : begin
                     if (Switch_CompressorCurrRowFull) begin
                         CurrentState <= COLLECT_LAST_ROW;
                     end else if (!Switch_FacadeWriteBusy && !Switch_EmptyFIFO) begin
-                        Switch_EnableReadFromFIFO <= 1'b1; 
+                        Switch_EnableReadFromFIFO <= 1'b1;
                         FacadeInput <= PixelFromFIFO; // this FIFO is FWFT
                         Switch_FacadeWriteRequested <= 1'b1;
                     end
@@ -166,11 +146,19 @@ module VGA_wrapper #(
     end
     
     always @(posedge CLK) begin
-        Counter_CLK <= Counter_CLK + 1;
-    end
-    
-    always @(posedge x_clk) begin
-        Counter_XCLK <= Counter_XCLK + 1;
+        if (!RST) begin
+            CurrX <= 0;
+            CurrY <= 0;
+        end else begin
+            if (CurrY == FrameHeight) begin
+                CurrY <= 0;
+            end else if (CurrX == FrameWidth) begin
+                CurrY <= CurrY + 1;
+                CurrX <= 0;
+            end else if (Switch_PixelFromVGAReady) begin
+                CurrX <= CurrX + 1;
+            end
+        end
     end
     
     clk_wiz_0 WIZ_XCLK (
@@ -198,8 +186,8 @@ module VGA_wrapper #(
     );
     
     fifo_generator_0 PCLK_CLK_FIFO (
-        .wr_clk(p_clk),
-        .rd_clk(CLK),
+        .clk(CLK),
+        .srst(!RST),
         .wr_en(Switch_PixelFromVGAReady && Switch_ActiveRow),
         .din(PixelFromVGA),
         .rd_en(Switch_EnableReadFromFIFO),
@@ -263,7 +251,7 @@ module VGA_wrapper #(
     
     fifo_generator_1 SDRAM_COMPRESSOR_CURR_FIFO (
         .clk(CLK),
-        .srst(RST),
+        .srst(!RST),
         .wr_en(Switch_EnableReadFromFIFO),
         .din(PixelFromFIFO),
         .rd_en(Switch_CompressorCurrInput),
@@ -274,7 +262,7 @@ module VGA_wrapper #(
     
     fifo_generator_1 SDRAM_COMPRESSOR_LAST_FIFO (
         .clk(CLK),
-        .srst(RST),
+        .srst(!RST),
         .wr_en(Switch_FacadeOutputReady),
         .din(FacadeOutput),
         .rd_en(Switch_CompressorLastInput),
@@ -302,7 +290,7 @@ module VGA_wrapper #(
     
     fifo_generator_2 COMPRESSOR_UART_FIFO (
         .clk(CLK),
-        .srst(RST),
+        .srst(!RST),
         .wr_en(Switch_SendFrameUART),
         .din(CompressedFrame),
         .rd_en(Switch_CanSendFrameUART),

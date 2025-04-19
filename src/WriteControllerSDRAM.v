@@ -19,13 +19,12 @@ module WriteControllerSDRAM #(
     output reg o_busy_wr
 );
 
-    localparam  IDLE        = 3'b000,
-                COLLECT     = 3'b001,
-                BURST_START = 3'b010,
-                BURST_WRITE = 3'b011,
-                BURST_DONE  = 3'b100;
+    localparam  IDLE        = 2'b00,
+                BURST_START = 2'b01,
+                BURST_WRITE = 2'b10,
+                BURST_DONE  = 2'b11;
             
-    reg [2:0] CurrentState;
+    reg [1:0] CurrentState;
 
     localparam BoundarySDRAM = FrameWidth * FrameHeight * 2;
     reg [$clog2(BoundarySDRAM)-1:0] HeadAddressSDRAM;
@@ -33,7 +32,7 @@ module WriteControllerSDRAM #(
     reg [$clog2(BurstLengthSDRAM)-1:0] Counter_CurrBurstItem;
 
     reg [PixelBitWidth-1:0] PixelsForSDRAM [BurstLengthSDRAM-1:0];
-    integer i;
+    reg [$clog2(BurstLengthSDRAM):0] i;
 
     always @(posedge CLK) begin
         if (!RST) begin
@@ -42,6 +41,7 @@ module WriteControllerSDRAM #(
             HeadAddressSDRAM <= 0;
             CurrentState <= IDLE;
             o_sdram_pixel <= 0;
+            o_busy_wr <= 1'b0;
             for (i = 0; i < BurstLengthSDRAM; i = i + 1) begin
                 PixelsForSDRAM[i] <= 0;
             end
@@ -51,7 +51,10 @@ module WriteControllerSDRAM #(
                     if (i_write_req) begin
                         PixelsForSDRAM[Counter_PixelsForSDRAM] <= i_pixel;
                         Counter_PixelsForSDRAM <= Counter_PixelsForSDRAM + 1;
-                        CurrentState <= (Counter_PixelsForSDRAM + 1 == BurstLengthSDRAM) ? BURST_START : IDLE;
+                        if (Counter_PixelsForSDRAM + 1 == BurstLengthSDRAM) begin
+                            CurrentState <= BURST_START;
+                            o_busy_wr <= 1'b1;
+                        end
                     end
                 end
                 BURST_START : begin
@@ -74,19 +77,12 @@ module WriteControllerSDRAM #(
                     Counter_PixelsForSDRAM <= 0;
                     Counter_CurrBurstItem <= 0;
                     CurrentState <= IDLE;
+                    o_busy_wr <= 1'b0;
                     if (HeadAddressSDRAM == BoundarySDRAM) begin
                         HeadAddressSDRAM <= 0;
                     end
                 end
             endcase
-        end
-    end
-    
-    always @(posedge CLK) begin
-        if (!RST) begin
-            o_busy_wr <= 1'b0;
-        end else begin
-            o_busy_wr <= (CurrentState != IDLE) ? 1'b1 : 1'b0;
         end
     end
 endmodule

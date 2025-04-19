@@ -76,8 +76,8 @@ module FacadeSDRAM #(
     
     assign o_sdram_enable = (CurrentOperation == READ || (CurrentOperation == WRITE && o_bursting_wr)) ? 1'b1 : 1'b0; 
         
-    assign o_busy_wr = (~i_sdram_busy && ~WriteOngoing);
-    assign o_busy_rd = (~i_sdram_busy && ~ReadOngoing);
+    assign o_busy_wr = (i_sdram_busy && WriteOngoing);
+    assign o_busy_rd = (i_sdram_busy && ReadOngoing);
         
     ReadControllerSDRAM #(
         FrameWidth,
