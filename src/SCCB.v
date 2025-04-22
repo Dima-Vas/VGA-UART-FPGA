@@ -5,7 +5,7 @@
 // ----------
 module SCCB #(
     parameter ClockFrequency = 50_000_000,
-    parameter ClockFrequencySCCB = 400_000
+    parameter ClockFrequencySCCB = 100_000
 )(
     input wire CLK, RST,
     input [7:0] i_data,
@@ -18,7 +18,7 @@ module SCCB #(
     localparam AddressOV7670 = 8'h42;
 
     localparam ClockHalfPeriodSCCB = ClockFrequency / ClockFrequencySCCB / 2;
-    integer Counter_SystemClockTick;
+    reg [$clog2(ClockHalfPeriodSCCB)-1:0] Counter_SystemClockTick;
     reg Switch_ClockPhaseSCCB;
     
     reg Switch_TristateWrite;
@@ -42,13 +42,14 @@ module SCCB #(
     reg [7:0] Register_i_data;
     reg [7:0] Register_i_addr;
     reg [7:0] CurrDataToTransfer;
-    reg [2:0] Counter_CurrBit;
+    localparam FrameLength = 8;
+    reg [$clog2(FrameLength):0] Counter_CurrBit;
     
     always @(posedge CLK) begin
         if (!RST) begin
             Counter_SystemClockTick <= 0;
             Switch_ClockPhaseSCCB <= 1'b1;
-            o_sio_c <= 1'b1;
+            o_sio_c <= 1'b0;
         end else begin
             if (CurrentState != IDLE) begin // action in progress
                 if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB) begin // SCCB clock edge
@@ -76,7 +77,7 @@ module SCCB #(
             CurrentState <= IDLE;
             Register_o_sio_d <= 1'b1;
             Switch_TristateWrite <= 1'b1;
-            Counter_CurrBit <= 7; // MSB first
+            Counter_CurrBit <= 0;
             Counter_CurrTransferCycle <= 0;
         end else begin
             case (CurrentState)
@@ -92,12 +93,11 @@ module SCCB #(
                     Register_o_sio_d <= 1'b0;
                     if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB / 2) begin
                         CurrentState <= DATA_FALL;
-                        Counter_CurrBit <= 7;
+                        Counter_CurrBit <= 0;
                     end
                 end
                 DATA_FALL : begin // clock is 0, set the data
-                    Register_o_sio_d <= CurrDataToTransfer[Counter_CurrBit];
-                    Switch_TristateWrite <= 1'b1;
+                    Switch_TristateWrite <= 1'b1;                    
                     if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB) begin
                         CurrentState <= DATA_RISE;
                     end
@@ -105,12 +105,13 @@ module SCCB #(
                 DATA_RISE : begin // clock is 1, 'shift' the data
                     Switch_TristateWrite <= 1'b1;
                     if (Counter_SystemClockTick + 1 == ClockHalfPeriodSCCB) begin
-                        if (Counter_CurrBit == 0) begin // all 8 bits are transfered
-                            Counter_CurrBit <= 7;
+                        if (Counter_CurrBit == FrameLength) begin // all 8 bits are transfered
+                            Counter_CurrBit <= 0;
                             CurrentState <= ACK;
                             Switch_TristateWrite <= 1'b0; // wait for the ACK answer
                         end else begin
-                            Counter_CurrBit <= Counter_CurrBit - 1;
+                            Register_o_sio_d <= CurrDataToTransfer[FrameLength - Counter_CurrBit - 1]; // MSB first
+                            Counter_CurrBit <= Counter_CurrBit + 1;
                             CurrentState <= DATA_FALL;
                         end
                     end

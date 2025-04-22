@@ -6,7 +6,7 @@
 module UART #(
     parameter ClockFrequency = 50_000_000,
     parameter BaudRate = 115200,
-    parameter BufferSize = 2 // must be a power of 2
+    parameter BufferSize = 256 // must be a power of 2, i.e. FT232R's 256 byte
 )(
     input wire CLK, RST,
     input wire i_ready,

@@ -6,7 +6,7 @@
 // 8 bits for the AMOUNT. 
 // ----------
 module RLE #(
-    parameter Thres = 2
+    parameter Thres = 5
 )(
     input wire CLK, RST,
     input wire i_ready,

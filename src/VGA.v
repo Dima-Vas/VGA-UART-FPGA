@@ -4,22 +4,29 @@
 // A VGA hardware management module, outputs the Y+U/V pixel pair, MSB first. 
 // ----------
 module VGA #(
-    parameter ClockFrequencyPCLK = 50_000_000,
-    parameter ClockFrequencySCCB = 400_000,
-    parameter PixelBitWidth = 16
+    parameter ClockFrequency = 50_000_000,
+    parameter ClockFrequencyPCLK = 6_144_000,
+    parameter ClockFrequencySCCB = 200_000,
+    parameter PixelBitWidth = 16,
+    parameter FrameWidth = 640,
+    parameter FrameHeight = 480,
+    parameter ActiveFrameWidth = 512,
+    parameter ActiveFrameHeight = 384
 )(
-    input wire p_clk, RST,
+    input wire CLK, p_clk, RST,
     input wire h_sync,
     input [7:0] i_data,
     inout o_sio_d,
     output wire o_sio_c,
-    output reg [PixelBitWidth-1:0] o_data,
-    output reg o_ready
+    output wire [PixelBitWidth-1:0] o_data,
+    output wire o_ready
 );
     
     localparam TransferNumberSCCB = 11; 
 
-    reg [$clog2(PixelBitWidth)-1:0] Counter_BitsRead;
+    reg Switch_FirstByteRead;
+    reg Switch_PixelReady;
+    reg [PixelBitWidth-1:0] Pixel;
     
     reg [7:0] SCCB_i_data;
     reg [7:0] SCCB_i_addr;
@@ -27,25 +34,64 @@ module VGA #(
     wire SCCB_o_busy;
     
     reg Switch_SetupSCCB;
+    reg Register1_Switch_SetupSCCB;
+    reg Register2_Switch_SetupSCCB;
     
     reg [7:0] SetupAddrSCCB;
     reg [7:0] SetupDataSCCB;
     
     reg [$clog2(TransferNumberSCCB)-1:0] Counter_CurrTransferSCCB;
-
+    
+    (* keep = "true" *) reg [31:0] Counter_PCLK;
+    (* keep = "true" *) reg [31:0] Counter_HSYNC;
+    
     always @(posedge p_clk) begin
         if (!RST) begin
-            Counter_BitsRead <= 0;
-            o_data <= 0;
-            o_ready <= 1'b0;
-            Counter_CurrTransferSCCB <= 0;
-            Switch_SetupSCCB <= 1'b1;
-        end else if (Switch_SetupSCCB) begin
-            if (SCCB_i_ready && SCCB_o_busy) begin // SCCB module took the input
-                SCCB_i_ready <= 1'b0;
-                Counter_CurrTransferSCCB <= Counter_CurrTransferSCCB + 1;
+            Switch_FirstByteRead <= 1'b0;
+            Pixel <= 0;
+            Switch_PixelReady <= 1'b0;
+            Counter_PCLK <= 0;
+        end else begin
+            Register1_Switch_SetupSCCB <= Switch_SetupSCCB;
+            Register2_Switch_SetupSCCB <= Register1_Switch_SetupSCCB;
+            if (!Register2_Switch_SetupSCCB) begin
+                if (Switch_FirstByteRead == 1'b0) begin
+                  Pixel[15:8] <= i_data;
+                  Switch_PixelReady <= 1'b0;
+                  Switch_FirstByteRead <= 1'b1;
+                end else begin
+                  Pixel[7:0] <= i_data;
+                  Switch_PixelReady <= 1'b1;
+                  Switch_FirstByteRead <= 1'b0;
+                end
             end else begin
-                if (!SCCB_o_busy) begin
+              Switch_PixelReady <= 1'b0;
+            end 
+        end
+    end
+    
+    reg Register_Switch_PixelReady;
+    reg Register2_Switch_PixelReady;
+    reg [PixelBitWidth-1:0] Register_Pixel;
+    
+    assign o_ready = (Register2_Switch_PixelReady == 1'b0 && Register_Switch_PixelReady == 1'b1) ? 1'b1 : 1'b0;
+    assign o_data = Register_Pixel;
+    
+    always @(posedge CLK) begin
+        if (!RST) begin
+            SCCB_i_ready <= 1'b0;
+            Switch_SetupSCCB <= 1'b1;
+            Counter_HSYNC <= 0;
+            Register_Switch_PixelReady <= 1'b0;
+        end else begin
+            Register_Switch_PixelReady <= Switch_PixelReady;
+            Register2_Switch_PixelReady <= Register_Switch_PixelReady;
+            Register_Pixel <= Pixel;
+            if (Switch_SetupSCCB) begin
+                if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
+                    SCCB_i_ready <= 1'b0;
+                    Counter_CurrTransferSCCB <= Counter_CurrTransferSCCB + 1;
+                end else if (!SCCB_o_busy) begin
                     if (Counter_CurrTransferSCCB == TransferNumberSCCB) begin
                         Switch_SetupSCCB <= 1'b0;
                     end else begin
@@ -55,23 +101,9 @@ module VGA #(
                     end
                 end
             end
-        end else begin
-            SCCB_i_ready <= 1'b0;
-            if (h_sync) begin
-                o_data[Counter_BitsRead + 7 -: 8] <= i_data; // YU or YV
-                Counter_BitsRead <= Counter_BitsRead + 8;
-                if (Counter_BitsRead + 8 >= PixelBitWidth) begin // row is read
-                    o_ready <= 1'b1;
-                    Counter_BitsRead <= 0;
-                end else begin
-                    o_ready <= 1'b0;
-                end 
-            end else begin
-                o_ready <= 1'b0; // in case h_sync is low but o_ready is not nullified
-            end
         end
     end
-    
+        
     always @(*) begin // ugly, but the best way to declare the byte array in Verilog
         case (Counter_CurrTransferSCCB)
             0: begin SetupAddrSCCB = 8'h12; SetupDataSCCB = 8'h80; end
@@ -89,8 +121,8 @@ module VGA #(
         endcase
     end
     
-    SCCB #(ClockFrequencyPCLK, ClockFrequencySCCB) sccb(
-        .CLK(p_clk),
+    SCCB #(ClockFrequency, ClockFrequencySCCB) sccb(
+        .CLK(CLK),
         .RST(RST),
         .i_data(SCCB_i_data),
         .i_addr(SCCB_i_addr),
