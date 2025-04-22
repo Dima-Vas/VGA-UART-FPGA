@@ -4,7 +4,7 @@
 // Data compressor for real-time UART video transferring. Input is a pixel, which, accumulated
 // with other pixels, represents a frame row that is being compressed afterwards using RLE.
 // Structure for UART - 5 bytes per transaction :
-// x[7:0] -> y[7:0] -> Y/U/V -> RLE_len[7:0] -> RLE_len[7:4]+Y/U/V_id[3:2]+y[1]+x[0]
+// x[7:0] -> y[7:0] -> RLE_len[7:4]+Y/U/V_id[3:2]+y[1]+x[0] -> Y/U/V -> RLE_len[7:0]
 // ----------
 
 module Compressor #(
@@ -56,9 +56,9 @@ module Compressor #(
     reg [$clog2(RowPixelWidth/2)-1:0] Counter_CurrElemU;
     reg [$clog2(RowPixelWidth/2)-1:0] Counter_CurrElemV;
     
-//    wire signed [8:0] DiffY = $signed(CurrY[Counter_CurrElemY]) - $signed(LastY[Counter_CurrElemY]);
-//    wire signed [8:0] DiffU = $signed(CurrU[Counter_CurrElemU]) - $signed(LastU[Counter_CurrElemU]);
-//    wire signed [8:0] DiffV = $signed(CurrV[Counter_CurrElemV]) - $signed(LastV[Counter_CurrElemV]);
+    wire signed [8:0] DiffY = $signed(CurrY[Counter_CurrElemY]) - $signed(LastY[Counter_CurrElemY]);
+    wire signed [8:0] DiffU = $signed(CurrU[Counter_CurrElemU]) - $signed(LastU[Counter_CurrElemU]);
+    wire signed [8:0] DiffV = $signed(CurrV[Counter_CurrElemV]) - $signed(LastV[Counter_CurrElemV]);
     
     reg Switch_SendingU;
     
