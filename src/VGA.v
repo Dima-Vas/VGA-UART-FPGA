@@ -72,6 +72,9 @@ module VGA #(
     
     reg Register_Switch_PixelReady;
     reg Register2_Switch_PixelReady;
+    
+    reg Register_SCCB_o_busy;
+    reg Register2_SCCB_o_busy;
     reg [PixelBitWidth-1:0] Register_Pixel;
     
     assign o_ready = (Register2_Switch_PixelReady == 1'b0 && Register_Switch_PixelReady == 1'b1) ? 1'b1 : 1'b0;
@@ -83,12 +86,15 @@ module VGA #(
             Switch_SetupSCCB <= 1'b1;
             Counter_HSYNC <= 0;
             Register_Switch_PixelReady <= 1'b0;
+            Counter_CurrTransferSCCB <= 1'b0;
         end else begin
             Register_Switch_PixelReady <= Switch_PixelReady;
             Register2_Switch_PixelReady <= Register_Switch_PixelReady;
+            Register_SCCB_o_busy <= SCCB_o_busy;
+            Register2_SCCB_o_busy <= Register_SCCB_o_busy;
             Register_Pixel <= Pixel;
             if (Switch_SetupSCCB) begin
-                if (SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
+                if (Register2_SCCB_o_busy && SCCB_i_ready) begin // SCCB module took the input
                     SCCB_i_ready <= 1'b0;
                     Counter_CurrTransferSCCB <= Counter_CurrTransferSCCB + 1;
                 end else if (!SCCB_o_busy) begin

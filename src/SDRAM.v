@@ -26,8 +26,8 @@ module SDRAM #(
     input i_rw,                         // 0 for write, 1 for read
     input [AddressWidth-1:0] i_addr,    // Address to read from - 2 bank bits, 13 row bits, 9 col bits
     input [WordLength-1:0] i_data,      // Data to write to SDRAM
-    input [WordLength-1:0] i_sdram_data,
-    output [WordLength-1:0] o_sdram_data,
+    input [WordLength-1:0] i_sdram_data,// Input from the SDRAM
+    output [WordLength-1:0] o_sdram_data,//Output to the SDRAM
     output reg o_clk_en,                // Clock Enable
     output reg o_cs_n,                  // Select SDRAM signal
     output reg o_ras_n,                 // Select a row #o_addr
