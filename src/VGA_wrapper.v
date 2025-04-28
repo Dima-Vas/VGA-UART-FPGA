@@ -10,14 +10,17 @@ module VGA_wrapper #(
     parameter ActiveFrameWidth = 512,
     parameter ActiveFrameHeight = 384,
     parameter PixelBitWidth = 16,
-    parameter BaudRateUART = 115200,
-    parameter BufferSizeUART = 256,
+    parameter BaudRateUART = 2_343_750,
+    parameter BufferSizeUART = 32768,
     parameter WordLengthSDRAM = 16,
     parameter BurstLengthSDRAM = 8,
     parameter BankAddrLengthSDRAM = 2,
     parameter RowAddrLengthSDRAM = 13,
     parameter ColAddrLengthSDRAM = 9,
-    parameter AddressWidthSDRAM = BankAddrLengthSDRAM + RowAddrLengthSDRAM + ColAddrLengthSDRAM
+    parameter AddressWidthSDRAM = BankAddrLengthSDRAM + RowAddrLengthSDRAM + ColAddrLengthSDRAM,
+    parameter MaxRunLength = 12, // a 12-bit number
+    parameter TolerRLE = 5,
+    parameter TolerDiff = 2
 )(
     input wire CLK, RST,
     input wire p_clk,
@@ -100,19 +103,16 @@ module VGA_wrapper #(
     wire Switch_CompressorCurrEmptyFIFO;
     wire Switch_CompressorLastEmptyFIFO;
     wire Switch_CompressorReady;
-    reg Switch_FirstFrame;
     
     (* keep = "true" *) reg [$clog2(FrameHeight)-1:0] CurrY, MinY = FrameHeight - ActiveFrameHeight, MaxY = ActiveFrameHeight;
     (* keep = "true" *) reg [$clog2(FrameWidth)-1:0] CurrX, MinX = FrameWidth - ActiveFrameWidth, MaxX = ActiveFrameWidth;
-    (* keep = "true" *) wire Switch_ActiveRow = (CurrY < MaxY) && (CurrY > MinY) && (CurrX < MaxX) && (CurrX > MinX);
+    (* keep = "true" *) wire Switch_ActiveRow = (CurrY <= MaxY) && (CurrY >= MinY) && (CurrX <= MaxX) && (CurrX >= MinX);
     
-    // TODO : add a switch to track the drop of a frame in case SDRAM is "full"
     always @(posedge CLK) begin
         if (!RST) begin
             Switch_EnableReadFromFIFO <= 1'b0;
             Switch_FacadeReadRequested <= 1'b0;
             CurrentState <= COLLECT_CURR_ROW;
-            Switch_FirstFrame <= 1'b1;
         end else begin
             Switch_EnableReadFromFIFO <= 1'b0;
             Switch_FacadeWriteRequested <= 1'b0;
@@ -129,15 +129,14 @@ module VGA_wrapper #(
                     end
                 end
                 COLLECT_LAST_ROW : begin
-                    if (Switch_CompressorLastRowFull || Switch_FirstFrame) begin
+                    if (Switch_CompressorLastRowFull) begin
                         CurrentState <= IDLE;
                     end else if (!Switch_FacadeReadBusy) begin
                         Switch_FacadeReadRequested <= 1'b1;
                     end
                 end
                 IDLE : begin // while compressor is transferring data to UART
-                    Switch_FirstFrame <= 1'b0;
-                    if (Switch_CompressorReady) begin
+                    if (Switch_CompressorReady && !Switch_FrameFullUART) begin
                         CurrentState <= COLLECT_CURR_ROW;
                     end
                 end
@@ -271,13 +270,19 @@ module VGA_wrapper #(
         .full()
     );
     
-    Compressor #(FrameWidth, PixelBitWidth) compressor (
+    Compressor #(FrameWidth,
+                 FrameHeight,
+                 PixelBitWidth,
+                 MaxRunLength,
+                 TolerRLE,
+                 TolerDiff) compressor (
         .CLK(CLK),
         .RST(RST),
         .i_pixel_curr(CompressorCurrInput),
+        .i_curr_y(CurrY),
         .i_pixel_last(CompressorLastInput),
         .i_curr_empty(Switch_CompressorCurrEmptyFIFO),
-        .i_uart_allowed(Switch_FrameFullUART),
+        .i_uart_allowed(~Switch_FrameFullUART),
         .i_last_empty(Switch_CompressorLastEmptyFIFO),
         .o_fetch_curr(Switch_CompressorCurrInput),
         .o_fetch_last(Switch_CompressorLastInput),

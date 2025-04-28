@@ -74,7 +74,7 @@ module FacadeSDRAM #(
 
     assign o_sdram_read = (CurrentOperation == READ) ? 1'b1 : 1'b0;
     
-    assign o_sdram_enable = (CurrentOperation == READ || (CurrentOperation == WRITE && o_bursting_wr)) ? 1'b1 : 1'b0; 
+    assign o_sdram_enable = (CurrentOperation == READ || (CurrentOperation == WRITE)) ? 1'b1 : 1'b0; 
         
     assign o_busy_wr = (i_sdram_busy && WriteOngoing);
     assign o_busy_rd = (i_sdram_busy && ReadOngoing);
@@ -107,7 +107,7 @@ module FacadeSDRAM #(
         .CLK(CLK),
         .RST(RST),
         .i_write_req(i_write_req),
-        .i_sdram_valid_wr(i_sdram_valid_wr && CurrentOperation == WRITE),
+        .i_sdram_valid_wr(i_sdram_valid_wr),
         .i_pixel(i_pixel),
         .o_sdram_pixel(o_sdram_pixel),
         .o_sdram_addr(o_sdram_addr_wr),

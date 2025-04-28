@@ -67,7 +67,7 @@ def redraw() :
     global curr_frame_idx
 
     c_time = time.localtime(time.time())
-    print(f"--- Frame # {frame_counter} : {c_time.tm_hour}:{c_time.tm_min}:{c_time.tm_sec} ---", file=sys.stderr)
+    # print(f"--- Redrawing Frame {frame_counter} : {c_time.tm_hour}:{c_time.tm_min}:{c_time.tm_sec} ---", file=sys.stderr)
     u_resized = cv2.resize(next_video_frame[1], (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_NEAREST)
     v_resized = cv2.resize(next_video_frame[2], (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_NEAREST)
     yuv = cv2.merge((next_video_frame[0], u_resized, v_resized))
@@ -88,20 +88,23 @@ def match_frame(data : int) :
     if tracing:
         if curr_frame_idx == PackFrame.ID.value:
             if data == 255:
-                print(f"TRACE: Stopped tracing - Found Frame End marker (ID 255).", file=sys.stderr)
+                # print(f"TRACE: Stopped tracing - Found Frame End marker (ID 255).", file=sys.stderr)
                 redraw()
                 return
+
             expected_id = (curr_id + 1) % 255
             if data == expected_id:
-                print(f"TRACE: Stopped tracing - Found expected ID {expected_id}. Lost {frames_lost_count} packets.", file=sys.stderr)
+                # print(f"TRACE: Stopped tracing - Found expected ID {expected_id}. Lost {frames_lost_count} packets.", file=sys.stderr)
                 tracing = False
                 curr_id = data
                 curr_frame_idx = 1
                 return
+
             else:
                 frames_lost_count += 1
-                print(f"TRACE: Discarding byte {curr_frame_idx} - {data:02x}. Waiting for ID {expected_id} or 255.", file=sys.stderr) # Too verbose during normal tracing
+                # print(f"TRACE: Discarding byte {curr_frame_idx} - {data:02x}. Waiting for ID {expected_id} or 255.", file=sys.stderr) # Too verbose during normal tracing
                 return
+
         else:
             curr_frame_idx = (curr_frame_idx + 1) % PACKET_LEN
             return 
@@ -110,14 +113,16 @@ def match_frame(data : int) :
         case PackFrame.ID.value :
             packet_id = data
             if packet_id == 255 :
-                print(f"INFO: Received Frame End marker (ID 255) after packet ID {curr_id}.", file=sys.stderr)
+                # print(f"INFO: Received Frame End marker (ID 255) after packet ID {curr_id}.", file=sys.stderr)
                 redraw()
                 return
+
             expected_id = (curr_id + 1) % 255
             if packet_id != expected_id:
-                print(f"ERROR: Transmission error: Expected ID {expected_id}, got {packet_id}. Starting trace.", file=sys.stderr)
+                # print(f"ERROR: Transmission error: Expected ID {expected_id}, got {packet_id}. Starting trace.", file=sys.stderr)
                 tracing = True
                 return
+
             # The ID is correct and not 255
             curr_id = packet_id
             # print(f"INFO: Received packet ID {packet_id}", file=sys.stderr)
@@ -161,10 +166,10 @@ def match_frame(data : int) :
                     packets_received += 1
                     # print(f"INFO: Applied packet ID {curr_id}: ch={ch_type}, y={y_coord}, x={x_coord}, amount={amount}, value={value}", file=sys.stderr)
                 except IndexError as e:
-                    print(f"CRITICAL: IndexError applying packet ID {curr_id}: ch={ch_type}, y={y_coord}, x={x_coord}, amount={amount}, value={value}", file=sys.stderr)
-                    print(f"CRITICAL: Channel {ch_type} dimensions: {next_video_frame[ch_type].shape}", file=sys.stderr)
-                    print(f"CRITICAL: Slice attempted: [{y_coord}][{x_coord}:{x_coord+amount}]", file=sys.stderr)
-                    print(f"CRITICAL: Entering trace due to IndexError.", file=sys.stderr)
+                    # print(f"CRITICAL: IndexError applying packet ID {curr_id}: ch={ch_type}, y={y_coord}, x={x_coord}, amount={amount}, value={value}", file=sys.stderr)
+                    # print(f"CRITICAL: Channel {ch_type} dimensions: {next_video_frame[ch_type].shape}", file=sys.stderr)
+                    # print(f"CRITICAL: Slice attempted: [{y_coord}][{x_coord}:{x_coord+amount}]", file=sys.stderr)
+                    # print(f"CRITICAL: Entering trace due to IndexError.", file=sys.stderr)
                     tracing = True
             else:
                  tracing = True
@@ -176,24 +181,31 @@ def match_frame(data : int) :
             curr_frame_idx = 0
 
 
-cv2.namedWindow("OV7670", cv2.WINDOW_NORMAL, )
+cv2.namedWindow("OV7670", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("OV7670", FRAME_WIDTH, FRAME_HEIGHT)
 
+baud = 2_343_750
 try:
-    with serial.Serial(port="COM4", baudrate=921600, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, timeout=0) as receiver :
-        
-        print("INFO: Starting receiver on COM4 at 921600 baud...", file=sys.stderr)
+    with serial.Serial(port="COM10", baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, timeout=0) as receiver :
+        packet_batch = 32768
+        print(f"INFO: Starting receiver on COM10 at {baud} baud...", file=sys.stderr)
         redraw()
-        receiver.set_buffer_size(65536)
+        receiver.set_buffer_size(int(1048576*64))
         receiver.read_all()
+        start_time = None
         while True :
-            frame = receiver.read(1)
-            if len(frame) == 0 :
+            seven_packets = receiver.read(packet_batch)
+            if len(seven_packets) == 0 :
                 if cv2.waitKey(1) == 27: # ESC
                     break
                 continue
-            match_frame(frame[0])
+            if start_time == None:
+                start_time = time.time()
+            for i in range(len(seven_packets)) :
+                match_frame(seven_packets[i])
             if cv2.waitKey(1) == 27: # ESC
+                break
+            if (time.time() - start_time > 9.5) :
                 break
 
 except serial.SerialException as e:
@@ -205,5 +217,8 @@ except Exception as e:
 
 
 cv2.destroyAllWindows()
-print(f"INFO: Total packets received : {packets_received}")
-print(f"INFO: Frames lost : {frames_lost_count}")
+    
+print(f"INFO: Total frames received : {packets_received*6}")
+print(f"INFO: frames lost : {frames_lost_count}")
+print(f"FPS reached : {frame_counter / (time.time() - start_time)}")
+print(f"Error rate : {frames_lost_count / (frames_lost_count + packets_received*6)}")
