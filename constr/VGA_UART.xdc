@@ -169,5 +169,3 @@ set_property DRIVE 12 [get_ports o_data]
 set_clock_groups -asynchronous -group [get_clocks CLK] -group [get_clocks p_clk]
 
 set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 4 [current_design]
-
-
