@@ -30,9 +30,8 @@ module UART #(
     reg [$clog2(TicksPerBit)-1:0] Counter_CurrTick = 0;
     
     assign o_ready = ((Counter_BufferHead + 1) != Counter_BufferTail);
-    
     reg Switch_Reading;
-        
+  
     always @(posedge CLK) begin
         if (!RST) begin        
             ShiftRegister <= 10'b1111111111;
