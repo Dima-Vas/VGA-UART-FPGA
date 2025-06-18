@@ -17,4 +17,4 @@ The `sim` directory contains the `*_tb.v` files for essential modules, originall
 
 **Implementation details**
 
-The details and specifics of this design, as well as the measurements and resource usage statistics, are provided in the thesis paper, the link to which will be added here once it is available for public citing.
+The details and specifics of this design, as well as the measurements and resource usage statistics, are provided in the thesis paper.
